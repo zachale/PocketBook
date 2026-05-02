@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
+import { Placeholder } from '@tiptap/extension-placeholder'
 import { Extension } from '@tiptap/core'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -10,17 +11,31 @@ import type { Entry } from '../shared/types'
 interface Props {
   entry: Entry
   onNewBubble: () => void
+  onDeleteBubble?: () => void
   autoFocus?: boolean
+  fresh?: boolean
 }
 
-function NewBubbleExtension(onNewBubble: () => void) {
+interface Handlers {
+  onNewBubble: () => void
+  onDeleteBubble?: () => void
+}
+
+function BubbleKeysExtension(handlersRef: React.MutableRefObject<Handlers>) {
   return Extension.create({
-    name: 'newBubble',
+    name: 'bubbleKeys',
     addKeyboardShortcuts() {
       return {
         'Mod-Enter': () => {
-          onNewBubble()
+          handlersRef.current.onNewBubble()
           return true
+        },
+        Backspace: () => {
+          if (this.editor.isEmpty && handlersRef.current.onDeleteBubble) {
+            handlersRef.current.onDeleteBubble()
+            return true
+          }
+          return false
         },
       }
     },
@@ -31,19 +46,22 @@ function NewBubbleExtension(onNewBubble: () => void) {
 function ActiveEditor({
   entry,
   onNewBubble,
+  onDeleteBubble,
   autoFocus,
   onHTMLChange,
-  onEmptyChange,
 }: {
   entry: Entry
   onNewBubble: () => void
+  onDeleteBubble?: () => void
   autoFocus: boolean
   onHTMLChange: (html: string) => void
-  onEmptyChange: (empty: boolean) => void
 }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const entryRef = useRef(entry)
   entryRef.current = entry
+
+  const handlersRef = useRef<Handlers>({ onNewBubble, onDeleteBubble })
+  handlersRef.current = { onNewBubble, onDeleteBubble }
 
   const save = useCallback((content: string) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -58,7 +76,12 @@ function ActiveEditor({
   }, [])
 
   const editor = useEditor({
-    extensions: [StarterKit, Markdown, NewBubbleExtension(onNewBubble)],
+    extensions: [
+      StarterKit,
+      Markdown,
+      Placeholder.configure({ placeholder: 'Start writing…' }),
+      BubbleKeysExtension(handlersRef),
+    ],
     content: entry.content,
     autofocus: autoFocus ? 'end' : false,
     editorProps: {
@@ -73,7 +96,6 @@ function ActiveEditor({
       const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
       onHTMLChange(editor.getHTML())
-      onEmptyChange(editor.isEmpty)
       try {
         const { view } = editor
         const { head } = view.state.selection
@@ -93,10 +115,9 @@ function ActiveEditor({
   return <EditorContent editor={editor} />
 }
 
-export function Bubble({ entry, onNewBubble, autoFocus = false }: Props) {
+export function Bubble({ entry, onNewBubble, onDeleteBubble, autoFocus = false, fresh = false }: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
-  const [editorEmpty, setEditorEmpty] = useState(!entry.content || entry.content.trim() === '')
   const [cachedHTML, setCachedHTML] = useState(() =>
     entry.content ? (marked.parse(entry.content) as string) : ''
   )
@@ -112,29 +133,21 @@ export function Bubble({ entry, onNewBubble, autoFocus = false }: Props) {
     return () => observer.disconnect()
   }, [])
 
-  const isEmpty = !entry.content || entry.content.trim() === ''
-
   return (
     <div
       ref={bubbleRef}
-      className={`bubble${isEmpty ? ' empty' : ''}`}
+      data-entry-id={entry.id}
+      className={`bubble${fresh ? ' fresh' : ''}`}
       onClick={() => setIsVisible(true)}
     >
       {isVisible ? (
-        <>
-          {editorEmpty && (
-            <span className="bubble-placeholder" aria-hidden="true">
-              Start writing...
-            </span>
-          )}
-          <ActiveEditor
-            entry={entry}
-            onNewBubble={onNewBubble}
-            autoFocus={autoFocus}
-            onHTMLChange={setCachedHTML}
-            onEmptyChange={setEditorEmpty}
-          />
-        </>
+        <ActiveEditor
+          entry={entry}
+          onNewBubble={onNewBubble}
+          onDeleteBubble={onDeleteBubble}
+          autoFocus={autoFocus}
+          onHTMLChange={setCachedHTML}
+        />
       ) : (
         <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cachedHTML) }} />
       )}

@@ -25,9 +25,11 @@ beforeEach(() => {
 })
 
 describe('Bubble', () => {
-  it('renders placeholder text when content is empty', () => {
-    render(<Bubble entry={mockEntry} onNewBubble={vi.fn()} />)
-    expect(screen.getByText(/start writing/i)).toBeInTheDocument()
+  it('renders placeholder via Tiptap data-placeholder when content is empty', () => {
+    const { container } = render(<Bubble entry={mockEntry} onNewBubble={vi.fn()} autoFocus={true} />)
+    const empty = container.querySelector('p.is-editor-empty')
+    expect(empty).toBeTruthy()
+    expect(empty?.getAttribute('data-placeholder')).toMatch(/start writing/i)
   })
 
   it('renders existing content', () => {

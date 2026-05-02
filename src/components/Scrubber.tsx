@@ -120,22 +120,21 @@ export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Pro
         className="scrubber-track"
         ref={trackRef}
         onClick={e => handleDrag(e.clientY)}
-      >
-        <div
-          className="scrubber-handle"
-          style={{ top: `calc(${handleRatio * 100}% - 20px)` }}
-          onMouseDown={e => { e.preventDefault(); isDragging.current = true }}
-        />
-        {labels.map(({ label, ratio }) => (
-          <span
-            key={label}
-            className="scrubber-label"
-            style={{ top: `${ratio * 100}%` }}
-          >
-            {label}
-          </span>
-        ))}
-      </div>
+      />
+      {labels.map(({ label, ratio }) => (
+        <span
+          key={label}
+          className="scrubber-label"
+          style={{ top: `calc(${ratio * 100}% - 6px)` }}
+        >
+          {label}
+        </span>
+      ))}
+      <div
+        className="scrubber-handle"
+        style={{ top: `calc(${handleRatio * 100}% - 6px)` }}
+        onMouseDown={e => { e.preventDefault(); isDragging.current = true }}
+      />
     </div>
   )
 }

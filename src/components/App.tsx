@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { DaySection } from './DaySection'
 import { Scrubber } from './Scrubber'
 import { Search } from './Search'
+import { Titlebar } from './Titlebar'
 import type { Entry, TimelineEntry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
@@ -15,10 +16,27 @@ export function App() {
   const [loadedDates, setLoadedDates] = useState<string[]>([])
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
+  const [freshIds, setFreshIds] = useState<Set<number>>(() => new Set())
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const today = React.useMemo(() => todayStr(), [])
+
+  const markFresh = useCallback((id: number) => {
+    setFreshIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    setTimeout(() => {
+      setFreshIds(prev => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }, 500)
+  }, [])
 
   // Initial load — day list = today + dates with entries (descending)
   useEffect(() => {
@@ -81,6 +99,17 @@ export function App() {
     setDayMap(prev => ({ ...prev, [date]: entries }))
   }, [])
 
+  const handleAddEntry = useCallback(async (date: string) => {
+    const existing = dayMap[date] ?? []
+    const newEntry = await window.api.upsertEntry({
+      date,
+      position: existing.length,
+      content: '',
+    })
+    markFresh(newEntry.id)
+    setDayMap(prev => ({ ...prev, [date]: [...(prev[date] ?? []), newEntry] }))
+  }, [dayMap, markFresh])
+
   const handleJumpToDate = useCallback((date: string) => {
     const el = document.querySelector(`[data-date="${date}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -88,16 +117,20 @@ export function App() {
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      <div className="titlebar-drag" />
+      <Titlebar onSearch={() => setSearchOpen(true)} />
 
       <div className="scroll-root" ref={scrollRef}>
         {loadedDates.map(date => (
           <DaySection
             key={date}
             date={date}
+            today={today}
             entries={dayMap[date] ?? []}
             isToday={date === today}
+            freshIds={freshIds}
             onEntriesChange={handleEntriesChange}
+            onAddEntry={handleAddEntry}
+            onMarkFresh={markFresh}
           />
         ))}
       </div>
