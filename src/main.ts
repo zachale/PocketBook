@@ -6,7 +6,7 @@ import type { UpsertEntryArgs } from './shared/types'
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string
 declare const MAIN_WINDOW_VITE_NAME: string
 
-const db = createDb(path.join(app.getPath('userData'), 'pocketbook.db'))
+let db: ReturnType<typeof createDb>
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -33,28 +33,39 @@ function createWindow() {
   }
 }
 
-// IPC handlers
+function wrap<T>(channel: string, fn: () => T): T {
+  try {
+    return fn()
+  } catch (err) {
+    console.error(`[ipc] ${channel}`, err)
+    throw err
+  }
+}
+
 ipcMain.handle('get-entries-for-dates', (_e, dates: string[]) =>
-  getEntriesForDates(db, dates)
+  wrap('get-entries-for-dates', () => getEntriesForDates(db, dates))
 )
 
 ipcMain.handle('upsert-entry', (_e, args: UpsertEntryArgs) =>
-  upsertEntry(db, args)
+  wrap('upsert-entry', () => upsertEntry(db, args))
 )
 
 ipcMain.handle('delete-entry', (_e, id: number) =>
-  deleteEntry(db, id)
+  wrap('delete-entry', () => deleteEntry(db, id))
 )
 
-ipcMain.handle('get-timeline-index', () =>
-  getTimelineIndex(db)
+ipcMain.handle('get-timeline-index', (_e) =>
+  wrap('get-timeline-index', () => getTimelineIndex(db))
 )
 
 ipcMain.handle('search-entries', (_e, term: string) =>
-  searchEntries(db, term)
+  wrap('search-entries', () => searchEntries(db, term))
 )
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  db = createDb(path.join(app.getPath('userData'), 'pocketbook.db'))
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
