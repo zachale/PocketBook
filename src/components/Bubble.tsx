@@ -18,21 +18,9 @@ function NewBubbleExtension(onNewBubble: () => void) {
     name: 'newBubble',
     addKeyboardShortcuts() {
       return {
-        Enter: () => {
-          const { state } = this.editor
-          const { $from } = state.selection
-          const isEmptyParagraph =
-            $from.parent.type.name === 'paragraph' &&
-            $from.parent.content.size === 0
-          const isAtDocEnd =
-            $from.pos === state.doc.content.size - 1
-
-          if (isEmptyParagraph && isAtDocEnd) {
-            this.editor.commands.deleteCurrentNode()
-            onNewBubble()
-            return true
-          }
-          return false
+        'Mod-Enter': () => {
+          onNewBubble()
+          return true
         },
       }
     },

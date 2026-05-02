@@ -37,6 +37,7 @@ export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Pro
   const trackRef = useRef<HTMLDivElement>(null)
   const [handleRatio, setHandleRatio] = useState(0)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  const [canScroll, setCanScroll] = useState(false)
   const isDragging = useRef(false)
   const onJumpToDateRef = useRef(onJumpToDate)
 
@@ -49,6 +50,20 @@ export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Pro
   useEffect(() => {
     onJumpToDateRef.current = onJumpToDate
   }, [onJumpToDate])
+
+  // Track whether content overflows viewport — re-check on resize and DOM mutation
+  useEffect(() => {
+    if (!scrollEl) return
+    const update = () => {
+      setCanScroll(scrollEl.scrollHeight > scrollEl.clientHeight + 1)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(scrollEl)
+    const mo = new MutationObserver(update)
+    mo.observe(scrollEl, { childList: true, subtree: true, characterData: true })
+    return () => { ro.disconnect(); mo.disconnect() }
+  }, [scrollEl])
 
   // Sync handle to scroll position — depends on scrollEl state
   useEffect(() => {
@@ -94,6 +109,8 @@ export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Pro
       window.removeEventListener('mouseup', onUp)
     }
   }, [handleDrag])
+
+  if (loadedDates.length <= 1 || !canScroll) return null
 
   const labels = getMonthLabels(timeline)
 

@@ -6,16 +6,6 @@ import type { Entry, TimelineEntry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
 
-function dateRange(startDate: string, count: number): string[] {
-  const dates: string[] = []
-  const d = new Date(startDate + 'T12:00:00')
-  for (let i = 0; i < count; i++) {
-    dates.push(d.toISOString().split('T')[0])
-    d.setDate(d.getDate() - 1)
-  }
-  return dates
-}
-
 function todayStr(): string {
   return new Date().toISOString().split('T')[0]
 }
@@ -25,114 +15,56 @@ export function App() {
   const [loadedDates, setLoadedDates] = useState<string[]>([])
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const isLoadingRef = useRef(false)
-  const oldestLoadedRef = useRef<string>(todayStr())
 
   const today = React.useMemo(() => todayStr(), [])
 
-  // Initial load
+  // Initial load — day list = today + dates with entries (descending)
   useEffect(() => {
     const init = async () => {
-      const dates = dateRange(today, 7)
-      oldestLoadedRef.current = dates[dates.length - 1]
+      const tl = await window.api.getTimelineIndex()
+      const dates = [today, ...tl.map(t => t.date).filter(d => d !== today)]
 
-      const [entries, tl] = await Promise.all([
-        window.api.getEntriesForDates(dates),
-        window.api.getTimelineIndex(),
-      ])
+      const entries = await window.api.getEntriesForDates(dates)
 
       const map: DayMap = {}
       for (const d of dates) map[d] = []
       for (const e of entries) {
         if (!map[e.date]) map[e.date] = []
         map[e.date].push(e)
-        map[e.date].sort((a, b) => a.position - b.position)
       }
+      for (const d of dates) map[d].sort((a, b) => a.position - b.position)
 
-      // Delete empty entries from past days (not today)
+      // Cleanup empty entries from past days
+      let timelineDirty = false
       for (const [date, dayEntries] of Object.entries(map)) {
-        if (date !== today) {
-          for (const entry of dayEntries) {
-            if (!entry.content || entry.content.trim() === '') {
-              window.api.deleteEntry(entry.id)
-            }
-          }
-          map[date] = dayEntries.filter(e => e.content && e.content.trim() !== '')
-        }
+        if (date === today) continue
+        const empties = dayEntries.filter(e => !e.content || e.content.trim() === '')
+        if (empties.length === 0) continue
+        for (const e of empties) await window.api.deleteEntry(e.id)
+        map[date] = dayEntries.filter(e => e.content && e.content.trim() !== '')
+        timelineDirty = true
       }
 
-      // Ensure today has at least one empty entry
+      // Drop dates that ended up empty after cleanup (always keep today)
+      const kept = dates.filter(d => d === today || map[d].length > 0)
+
+      // Seed today's empty bubble if none
       if (map[today].length === 0) {
         const empty = await window.api.upsertEntry({ date: today, position: 0, content: '' })
         map[today] = [empty]
-        // Re-fetch timeline since we just added a new day's entry
-        const updatedTimeline = await window.api.getTimelineIndex()
-        setTimeline(updatedTimeline)
-      } else {
-        setTimeline(tl)
+        timelineDirty = true
       }
 
       setDayMap(map)
-      setLoadedDates(dates)
+      setLoadedDates(kept)
+      setTimeline(timelineDirty ? await window.api.getTimelineIndex() : tl)
     }
     init()
   }, [today])
 
-  const loadMoreDays = useCallback(async () => {
-    if (isLoadingRef.current || !hasMore) return
-    isLoadingRef.current = true
-    setIsLoading(true)
-
-    const oldest = oldestLoadedRef.current
-    const d = new Date(oldest + 'T12:00:00')
-    d.setDate(d.getDate() - 1)
-    const nextStart = d.toISOString().split('T')[0]
-    const dates = dateRange(nextStart, 7)
-    oldestLoadedRef.current = dates[dates.length - 1]
-
-    // Stop if we've gone back 2 years with no data
-    const cutoff = new Date()
-    cutoff.setFullYear(cutoff.getFullYear() - 2)
-    const pastCutoff = new Date(dates[dates.length - 1]) < cutoff
-
-    const entries = await window.api.getEntriesForDates(dates)
-
-    setDayMap(prev => {
-      const next = { ...prev }
-      for (const d of dates) if (!next[d]) next[d] = []
-      for (const e of entries) {
-        if (!next[e.date]) next[e.date] = []
-        next[e.date].push(e)
-        next[e.date].sort((a, b) => a.position - b.position)
-      }
-      return next
-    })
-
-    setLoadedDates(prev => [...prev, ...dates])
-
-    if (pastCutoff) setHasMore(false)
-    isLoadingRef.current = false
-    setIsLoading(false)
-  }, [hasMore])
-
-  // IntersectionObserver on sentinel
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) loadMoreDays() },
-      { root: scrollRef.current, rootMargin: '200px' }
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loadMoreDays])
-
-  // Cmd+F to open search
+  // Cmd+F to open search, Escape to close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -168,12 +100,6 @@ export function App() {
             onEntriesChange={handleEntriesChange}
           />
         ))}
-        <div ref={sentinelRef} style={{ height: 1 }} />
-        {!hasMore && (
-          <p style={{ textAlign: 'center', color: '#88aac8', padding: '20px', fontSize: 12 }}>
-            Beginning of PocketBook
-          </p>
-        )}
       </div>
 
       <Scrubber
