@@ -9,6 +9,7 @@ import DOMPurify from 'dompurify'
 import type { Entry } from '../shared/types'
 import type { TagSuggestion } from '../shared/ai/tag-types'
 import { TagBar } from './TagBar'
+import { useSuggestionTrigger } from '../hooks/useSuggestionTrigger'
 
 interface Props {
   entry: Entry
@@ -17,7 +18,7 @@ interface Props {
   onEmptyChange?: (empty: boolean) => void
   autoFocus?: boolean
   fresh?: boolean
-  suggestions?: TagSuggestion[]
+  aiReady?: boolean
 }
 
 interface Handlers {
@@ -54,6 +55,7 @@ function ActiveEditor({
   onNewBubble,
   onDeleteBubble,
   onEmptyChange,
+  onTextChange,
   autoFocus,
   onHTMLChange,
 }: {
@@ -61,6 +63,7 @@ function ActiveEditor({
   onNewBubble: () => void
   onDeleteBubble?: () => void
   onEmptyChange?: (empty: boolean) => void
+  onTextChange?: (text: string) => void
   autoFocus: boolean
   onHTMLChange: (html: string) => void
 }) {
@@ -106,6 +109,7 @@ function ActiveEditor({
       const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
       onHTMLChange(editor.getHTML())
+      onTextChange?.(content)
       const isEmpty = editor.isEmpty
       if (wasEmptyRef.current !== isEmpty) {
         wasEmptyRef.current = isEmpty
@@ -137,13 +141,28 @@ export function Bubble({
   onEmptyChange,
   autoFocus = false,
   fresh = false,
-  suggestions = [],
+  aiReady = false,
 }: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
   const [cachedHTML, setCachedHTML] = useState(() =>
     entry.content ? (marked.parse(entry.content) as string) : ''
   )
+  const [liveText, setLiveText] = useState(entry.content)
+  const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
+
+  useSuggestionTrigger({
+    content: liveText,
+    enabled: aiReady && isVisible,
+    onTrigger: async (text) => {
+      try {
+        const r = await window.api.tags.suggest(entry.id, text)
+        setSuggestions(r)
+      } catch (err) {
+        console.warn('[Bubble] suggest failed', err)
+      }
+    },
+  })
 
   useEffect(() => {
     const el = bubbleRef.current
@@ -169,6 +188,7 @@ export function Bubble({
           onNewBubble={onNewBubble}
           onDeleteBubble={onDeleteBubble}
           onEmptyChange={onEmptyChange}
+          onTextChange={setLiveText}
           autoFocus={autoFocus}
           onHTMLChange={setCachedHTML}
         />

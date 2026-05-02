@@ -140,6 +140,7 @@ export function App() {
             entries={dayMap[date] ?? []}
             isToday={date === today}
             freshIds={freshIds}
+            aiReady={aiConfigStatus === 'ready'}
             onEntriesChange={handleEntriesChange}
             onAddEntry={handleAddEntry}
             onMarkFresh={markFresh}
