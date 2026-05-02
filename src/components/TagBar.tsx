@@ -110,6 +110,17 @@ export function TagBar({ entryId, suggestions }: Props) {
         />
       ))}
 
+      {visibleSuggestions.map(s => (
+        <TagPill
+          key={`${s.tagId ?? 'new'}:${s.name}`}
+          variant="suggested"
+          name={s.name}
+          aiGenerated={s.aiGenerated}
+          title={s.description || undefined}
+          onClick={() => handleAcceptSuggestion(s)}
+        />
+      ))}
+
       {composing ? (
         <div ref={composerRef} className="tag-compose">
           <input
@@ -141,17 +152,6 @@ export function TagBar({ entryId, suggestions }: Props) {
           <span className="tag-pill-name">New tag</span>
         </button>
       )}
-
-      {visibleSuggestions.map(s => (
-        <TagPill
-          key={`${s.tagId ?? 'new'}:${s.name}`}
-          variant="suggested"
-          name={s.name}
-          aiGenerated={s.aiGenerated}
-          title={s.description || undefined}
-          onClick={() => handleAcceptSuggestion(s)}
-        />
-      ))}
     </div>
   )
 }

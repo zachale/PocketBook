@@ -109,7 +109,7 @@ export function DaySection({
             onNewBubble={() => handleNewBubble(idx)}
             onDeleteBubble={() => handleDeleteBubble(idx)}
             onEmptyChange={(empty) => handleEmptyChange(entry.id, empty)}
-            autoFocus={isToday && isLast}
+            autoFocus={freshIds.has(entry.id) || (isToday && isLast)}
           />
         )
       })}
