@@ -111,17 +111,20 @@ export function DaySection({
         )
       })}
       {showPill && (
-        <button
-          type="button"
-          className="add-pill"
-          onClick={() => onAddEntry(date)}
-          aria-label="Add new entry"
-        >
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-            <path d="M5.5 1.5v8M1.5 5.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-          <span>New entry</span>
-        </button>
+        <div className="add-pill-row">
+          <button
+            type="button"
+            className="add-pill"
+            onClick={() => onAddEntry(date)}
+            aria-label="Add new entry"
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
+              <path d="M5.5 1.5v8M1.5 5.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>New entry</span>
+          </button>
+          <span className="add-pill-hint" aria-hidden="true">⌘ + Enter</span>
+        </div>
       )}
     </div>
   )
