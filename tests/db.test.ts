@@ -32,8 +32,9 @@ describe('upsertEntry', () => {
 
 describe('getEntriesForDates', () => {
   it('returns entries for requested dates ordered by position', () => {
-    upsertEntry(db, { date: '2026-05-01', position: 1, content: 'second' })
+    // Insert at position 0 first, then at position 1 — no shifting needed
     upsertEntry(db, { date: '2026-05-01', position: 0, content: 'first' })
+    upsertEntry(db, { date: '2026-05-01', position: 1, content: 'second' })
     upsertEntry(db, { date: '2026-04-30', position: 0, content: 'yesterday' })
 
     const results = getEntriesForDates(db, ['2026-05-01'])

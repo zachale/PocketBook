@@ -47,12 +47,19 @@ export function Search({ onClose, onSelectResult }: Props) {
       return
     }
     let cancelled = false
-    window.api.searchEntries(debouncedTerm).then(r => {
-      if (!cancelled) {
-        setResults(r)
-        setSearched(true)
-      }
-    })
+    window.api.searchEntries(debouncedTerm)
+      .then(r => {
+        if (!cancelled) {
+          setResults(r)
+          setSearched(true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResults([])
+          setSearched(true)
+        }
+      })
     return () => { cancelled = true }
   }, [debouncedTerm])
 

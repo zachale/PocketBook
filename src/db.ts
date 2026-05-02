@@ -53,12 +53,21 @@ export function upsertEntry(db: Database.Database, args: UpsertEntryArgs): Entry
     return db.prepare('SELECT * FROM entries WHERE id = ?').get(args.id) as Entry
   }
 
-  const result = db.prepare(`
-    INSERT INTO entries (date, position, content, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(args.date, args.position, args.content, now, now)
+  // Shift siblings at or after this position up by 1 (do this in a transaction to be safe)
+  const insertWithShift = db.transaction(() => {
+    db.prepare(`
+      UPDATE entries SET position = position + 1 WHERE date = ? AND position >= ?
+    `).run(args.date, args.position)
 
-  return db.prepare('SELECT * FROM entries WHERE id = ?').get(result.lastInsertRowid) as Entry
+    const result = db.prepare(`
+      INSERT INTO entries (date, position, content, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(args.date, args.position, args.content, now, now)
+
+    return db.prepare('SELECT * FROM entries WHERE id = ?').get(result.lastInsertRowid) as Entry
+  })
+
+  return insertWithShift()
 }
 
 export function getEntriesForDates(db: Database.Database, dates: string[]): Entry[] {
@@ -84,6 +93,8 @@ export function getTimelineIndex(db: Database.Database): TimelineEntry[] {
 
 export function searchEntries(db: Database.Database, term: string): SearchResult[] {
   if (!term.trim()) return []
+  // Wrap in phrase quotes to prevent FTS5 syntax errors on special characters
+  const safeTerm = '"' + term.replace(/"/g, '""') + '"*'
   const rows = db.prepare(`
     SELECT
       e.id as entryId,
@@ -95,6 +106,6 @@ export function searchEntries(db: Database.Database, term: string): SearchResult
     WHERE fts_entries MATCH ?
     ORDER BY rank
     LIMIT 50
-  `).all(term + '*') as SearchResult[]
+  `).all(safeTerm) as SearchResult[]
   return rows
 }

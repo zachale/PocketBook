@@ -12,7 +12,7 @@ function getMonthLabels(timeline: TimelineEntry[]): { label: string; ratio: numb
   if (timeline.length === 0) return []
   const oldest = timeline[timeline.length - 1].date
   const newest = timeline[0].date
-  const totalMs = new Date(newest).getTime() - new Date(oldest).getTime()
+  const totalMs = new Date(newest + 'T12:00:00').getTime() - new Date(oldest + 'T12:00:00').getTime()
   if (totalMs === 0) return []
 
   const seen = new Set<string>()
@@ -24,8 +24,8 @@ function getMonthLabels(timeline: TimelineEntry[]): { label: string; ratio: numb
       return true
     })
     .map(({ date }) => {
-      const d = new Date(date)
-      const elapsed = new Date(newest).getTime() - d.getTime()
+      const d = new Date(date + 'T12:00:00')
+      const elapsed = new Date(newest + 'T12:00:00').getTime() - d.getTime()
       return {
         label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
         ratio: elapsed / totalMs,

@@ -54,15 +54,31 @@ export function App() {
         map[e.date].sort((a, b) => a.position - b.position)
       }
 
+      // Delete empty entries from past days (not today)
+      for (const [date, dayEntries] of Object.entries(map)) {
+        if (date !== today) {
+          for (const entry of dayEntries) {
+            if (!entry.content || entry.content.trim() === '') {
+              window.api.deleteEntry(entry.id)
+            }
+          }
+          map[date] = dayEntries.filter(e => e.content && e.content.trim() !== '')
+        }
+      }
+
       // Ensure today has at least one empty entry
       if (map[today].length === 0) {
         const empty = await window.api.upsertEntry({ date: today, position: 0, content: '' })
         map[today] = [empty]
+        // Re-fetch timeline since we just added a new day's entry
+        const updatedTimeline = await window.api.getTimelineIndex()
+        setTimeline(updatedTimeline)
+      } else {
+        setTimeline(tl)
       }
 
       setDayMap(map)
       setLoadedDates(dates)
-      setTimeline(tl)
     }
     init()
   }, [today])
@@ -82,12 +98,7 @@ export function App() {
     // Stop if we've gone back 2 years with no data
     const cutoff = new Date()
     cutoff.setFullYear(cutoff.getFullYear() - 2)
-    if (new Date(dates[dates.length - 1]) < cutoff) {
-      setHasMore(false)
-      isLoadingRef.current = false
-      setIsLoading(false)
-      return
-    }
+    const pastCutoff = new Date(dates[dates.length - 1]) < cutoff
 
     const entries = await window.api.getEntriesForDates(dates)
 
@@ -103,6 +114,8 @@ export function App() {
     })
 
     setLoadedDates(prev => [...prev, ...dates])
+
+    if (pastCutoff) setHasMore(false)
     isLoadingRef.current = false
     setIsLoading(false)
   }, [hasMore])

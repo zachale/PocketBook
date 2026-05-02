@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
 import { Extension } from '@tiptap/core'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { Entry } from '../shared/types'
 
 interface Props {
@@ -80,7 +81,8 @@ function ActiveEditor({
       },
     },
     onUpdate: ({ editor }) => {
-      const content = editor.storage.markdown.getMarkdown()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
       onHTMLChange(editor.getHTML())
       onEmptyChange(editor.isEmpty)
@@ -146,7 +148,7 @@ export function Bubble({ entry, onNewBubble, autoFocus = false }: Props) {
           />
         </>
       ) : (
-        <div dangerouslySetInnerHTML={{ __html: cachedHTML }} />
+        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cachedHTML) }} />
       )}
     </div>
   )
