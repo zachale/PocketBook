@@ -36,20 +36,31 @@ function getMonthLabels(timeline: TimelineEntry[]): { label: string; ratio: numb
 export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [handleRatio, setHandleRatio] = useState(0)
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
   const isDragging = useRef(false)
+  const onJumpToDateRef = useRef(onJumpToDate)
 
-  // Sync handle to scroll position
+  // Capture the element from the ref after mount
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
+    setScrollEl(scrollRef.current)
+  }, [scrollRef])
+
+  // Update the ref whenever onJumpToDate changes
+  useEffect(() => {
+    onJumpToDateRef.current = onJumpToDate
+  }, [onJumpToDate])
+
+  // Sync handle to scroll position — depends on scrollEl state
+  useEffect(() => {
+    if (!scrollEl) return
     const onScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = el
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl
       const max = scrollHeight - clientHeight
       setHandleRatio(max > 0 ? scrollTop / max : 0)
     }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [scrollRef])
+    scrollEl.addEventListener('scroll', onScroll, { passive: true })
+    return () => scrollEl.removeEventListener('scroll', onScroll)
+  }, [scrollEl])
 
   const ratioToDate = useCallback(
     (ratio: number): string => {
@@ -68,9 +79,9 @@ export function Scrubber({ timeline, loadedDates, scrollRef, onJumpToDate }: Pro
       const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
       setHandleRatio(ratio)
       const date = ratioToDate(ratio)
-      if (date) onJumpToDate(date)
+      if (date) onJumpToDateRef.current(date)
     },
-    [ratioToDate, onJumpToDate]
+    [ratioToDate]
   )
 
   useEffect(() => {
