@@ -7,12 +7,15 @@ import { OLLAMA_DEFAULT_BASE_URL } from './shared/ai/presets'
 import { createProvider } from './ai/registry'
 import { OllamaProvider } from './ai/providers/OllamaProvider'
 import { loadConfig, saveConfig, publicView } from './ai/settings'
+import { TagService } from './ai/tags/TagService'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string
 declare const MAIN_WINDOW_VITE_NAME: string
 
 let db: ReturnType<typeof createDb>
 let activeProvider: AIProvider | null = null
+let activeProviderConfig: import('./shared/ai/types').AIProviderConfig | null = null
+let tagService: TagService | null = null
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -104,6 +107,7 @@ ipcMain.handle('ai:save-config', (_e, config: AIProviderConfig) =>
     if (!result.ok) return result
     saveConfig(db, config)
     activeProvider = provider
+    activeProviderConfig = config
     return { ok: true }
   })
 )
@@ -138,16 +142,47 @@ ipcMain.handle('ai:chat', (_e, messages: ChatMessage[]) =>
   })
 )
 
+// ── Tag IPC ─────────────────────────────────────────────────────
+ipcMain.handle('tags:list', () =>
+  wrap('tags:list', () => tagService!.list())
+)
+
+ipcMain.handle('tags:for-entry', (_e, entryId: number) =>
+  wrap('tags:for-entry', () => tagService!.forEntry(entryId))
+)
+
+ipcMain.handle('tags:create', (_e, input: { name: string; description?: string }) =>
+  wrapAsync('tags:create', () => tagService!.create(input))
+)
+
+ipcMain.handle('tags:add', (_e, entryId: number, tagId: number) =>
+  wrap('tags:add', () => tagService!.add(entryId, tagId))
+)
+
+ipcMain.handle('tags:remove', (_e, entryId: number, tagId: number) =>
+  wrap('tags:remove', () => tagService!.remove(entryId, tagId))
+)
+
+ipcMain.handle('tags:suggest', (_e, entryId: number, content: string) =>
+  wrapAsync('tags:suggest', () => tagService!.suggest(entryId, content))
+)
+
 app.whenReady().then(() => {
   db = createDb(path.join(app.getPath('userData'), 'pocketbook.db'))
   const stored = loadConfig(db)
   if (stored) {
     try {
       activeProvider = createProvider(stored)
+      activeProviderConfig = stored
     } catch (err) {
       console.error('[main] failed to instantiate stored AI provider', err)
     }
   }
+  tagService = new TagService(
+    db,
+    () => activeProvider,
+    () => activeProviderConfig?.embeddingModel ?? null,
+  )
   createWindow()
 })
 

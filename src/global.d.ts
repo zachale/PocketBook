@@ -13,5 +13,13 @@ interface Window {
       embed: (text: string) => Promise<number[]>
       chat: (messages: import('./shared/ai/types').ChatMessage[]) => Promise<string>
     }
+    tags: {
+      list: () => Promise<import('./shared/ai/tag-types').TagPublic[]>
+      forEntry: (entryId: number) => Promise<import('./shared/ai/tag-types').TagPublic[]>
+      create: (input: { name: string; description?: string }) => Promise<import('./shared/ai/tag-types').TagPublic>
+      add: (entryId: number, tagId: number) => Promise<void>
+      remove: (entryId: number, tagId: number) => Promise<void>
+      suggest: (entryId: number, content: string) => Promise<import('./shared/ai/tag-types').TagSuggestion[]>
+    }
   }
 }

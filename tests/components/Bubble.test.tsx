@@ -29,6 +29,14 @@ beforeEach(() => {
       embed: vi.fn(),
       chat: vi.fn(),
     },
+    tags: {
+      list: vi.fn().mockResolvedValue([]),
+      forEntry: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      add: vi.fn(),
+      remove: vi.fn(),
+      suggest: vi.fn().mockResolvedValue([]),
+    },
   }
 })
 
