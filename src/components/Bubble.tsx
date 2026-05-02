@@ -7,6 +7,8 @@ import { Extension } from '@tiptap/core'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { Entry } from '../shared/types'
+import type { TagSuggestion } from '../shared/ai/tag-types'
+import { TagBar } from './TagBar'
 
 interface Props {
   entry: Entry
@@ -15,6 +17,7 @@ interface Props {
   onEmptyChange?: (empty: boolean) => void
   autoFocus?: boolean
   fresh?: boolean
+  suggestions?: TagSuggestion[]
 }
 
 interface Handlers {
@@ -127,7 +130,15 @@ function ActiveEditor({
   return <EditorContent editor={editor} />
 }
 
-export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, autoFocus = false, fresh = false }: Props) {
+export function Bubble({
+  entry,
+  onNewBubble,
+  onDeleteBubble,
+  onEmptyChange,
+  autoFocus = false,
+  fresh = false,
+  suggestions = [],
+}: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
   const [cachedHTML, setCachedHTML] = useState(() =>
@@ -164,6 +175,7 @@ export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, auto
       ) : (
         <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cachedHTML) }} />
       )}
+      <TagBar entryId={entry.id} suggestions={suggestions} />
     </div>
   )
 }
