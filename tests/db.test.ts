@@ -23,6 +23,11 @@ describe('upsertEntry', () => {
     expect(updated.id).toBe(original.id)
     expect(updated.content).toBe('updated')
   })
+
+  it('throws when updating a non-existent id', () => {
+    expect(() => upsertEntry(db, { id: 9999, date: '2026-05-01', position: 0, content: 'x' }))
+      .toThrow('no entry found with id 9999')
+  })
 })
 
 describe('getEntriesForDates', () => {
@@ -80,5 +85,18 @@ describe('searchEntries', () => {
     upsertEntry(db, { date: '2026-05-01', position: 0, content: 'hello world' })
     const results = searchEntries(db, 'xyznotfound')
     expect(results).toHaveLength(0)
+  })
+
+  it('reflects updated content in search', () => {
+    const e = upsertEntry(db, { date: '2026-05-01', position: 0, content: 'original term' })
+    upsertEntry(db, { id: e.id, date: '2026-05-01', position: 0, content: 'replaced content' })
+    expect(searchEntries(db, 'original')).toHaveLength(0)
+    expect(searchEntries(db, 'replaced')).toHaveLength(1)
+  })
+
+  it('does not return deleted entries', () => {
+    const e = upsertEntry(db, { date: '2026-05-01', position: 0, content: 'will be deleted' })
+    deleteEntry(db, e.id)
+    expect(searchEntries(db, 'deleted')).toHaveLength(0)
   })
 })

@@ -42,9 +42,13 @@ export function upsertEntry(db: Database.Database, args: UpsertEntryArgs): Entry
   const now = Date.now()
 
   if (args.id != null) {
-    db.prepare(`
+    const info = db.prepare(`
       UPDATE entries SET content = ?, position = ?, updated_at = ? WHERE id = ?
     `).run(args.content, args.position, now, args.id)
+
+    if (info.changes === 0) {
+      throw new Error(`upsertEntry: no entry found with id ${args.id}`)
+    }
 
     return db.prepare('SELECT * FROM entries WHERE id = ?').get(args.id) as Entry
   }
@@ -59,6 +63,9 @@ export function upsertEntry(db: Database.Database, args: UpsertEntryArgs): Entry
 
 export function getEntriesForDates(db: Database.Database, dates: string[]): Entry[] {
   if (dates.length === 0) return []
+  if (dates.length > 999) {
+    throw new Error(`getEntriesForDates: too many dates requested (max 999, got ${dates.length})`)
+  }
   const placeholders = dates.map(() => '?').join(',')
   return db.prepare(`
     SELECT * FROM entries WHERE date IN (${placeholders}) ORDER BY date DESC, position ASC
