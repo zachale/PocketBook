@@ -173,7 +173,7 @@ export function App() {
       {searchOpen && (
         <Search
           onClose={() => setSearchOpen(false)}
-          onSelectResult={(date) => {
+          onSelectResult={(date, _entryId) => {
             setSearchOpen(false)
             handleJumpToDate(date)
           }}
