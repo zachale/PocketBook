@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 // Vitest doesn't inject `jest` as a global even with globals:true in some versions,
 // so we alias it here so RTL can detect vi.useFakeTimers() and advance the internal
 // setTimeout(0) in asyncWrapper — otherwise userEvent.type() hangs indefinitely.
-if (typeof globalThis.jest === 'undefined') {
+if (typeof (globalThis as Record<string, unknown>).jest === 'undefined') {
   ;(globalThis as unknown as Record<string, unknown>).jest = vi
 }
 
