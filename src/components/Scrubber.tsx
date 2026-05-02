@@ -4,7 +4,7 @@ import type { TimelineEntry } from '../shared/types'
 interface Props {
   timeline: TimelineEntry[]
   loadedDates: string[]
-  scrollEl: HTMLElement | null
+  scrollRef: React.RefObject<HTMLDivElement | null>
   onJumpToDate: (date: string) => void
 }
 

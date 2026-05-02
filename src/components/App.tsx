@@ -30,12 +30,14 @@ export function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const isLoadingRef = useRef(false)
   const oldestLoadedRef = useRef<string>(todayStr())
+
+  const today = React.useMemo(() => todayStr(), [])
 
   // Initial load
   useEffect(() => {
     const init = async () => {
-      const today = todayStr()
       const dates = dateRange(today, 7)
       oldestLoadedRef.current = dates[dates.length - 1]
 
@@ -63,10 +65,11 @@ export function App() {
       setTimeline(tl)
     }
     init()
-  }, [])
+  }, [today])
 
   const loadMoreDays = useCallback(async () => {
-    if (isLoading || !hasMore) return
+    if (isLoadingRef.current || !hasMore) return
+    isLoadingRef.current = true
     setIsLoading(true)
 
     const oldest = oldestLoadedRef.current
@@ -81,6 +84,7 @@ export function App() {
     cutoff.setFullYear(cutoff.getFullYear() - 2)
     if (new Date(dates[dates.length - 1]) < cutoff) {
       setHasMore(false)
+      isLoadingRef.current = false
       setIsLoading(false)
       return
     }
@@ -99,8 +103,9 @@ export function App() {
     })
 
     setLoadedDates(prev => [...prev, ...dates])
+    isLoadingRef.current = false
     setIsLoading(false)
-  }, [isLoading, hasMore])
+  }, [hasMore])
 
   // IntersectionObserver on sentinel
   useEffect(() => {
@@ -136,8 +141,6 @@ export function App() {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  const today = todayStr()
-
   return (
     <div style={{ height: '100%', position: 'relative' }}>
       <div className="titlebar-drag" />
@@ -163,7 +166,7 @@ export function App() {
       <Scrubber
         timeline={timeline}
         loadedDates={loadedDates}
-        scrollEl={scrollRef.current}
+        scrollRef={scrollRef}
         onJumpToDate={handleJumpToDate}
       />
 
