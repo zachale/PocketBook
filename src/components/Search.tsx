@@ -6,6 +6,20 @@ interface Props {
   onSelectResult: (date: string, entryId: number) => void
 }
 
+function SnippetText({ html }: { html: string }) {
+  const parts = html.split(/(<mark>.*?<\/mark>)/g)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith('<mark>') && part.endsWith('</mark>')) {
+          return <mark key={i}>{part.slice(6, -7)}</mark>
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -32,10 +46,14 @@ export function Search({ onClose, onSelectResult }: Props) {
       setSearched(false)
       return
     }
+    let cancelled = false
     window.api.searchEntries(debouncedTerm).then(r => {
-      setResults(r)
-      setSearched(true)
+      if (!cancelled) {
+        setResults(r)
+        setSearched(true)
+      }
     })
+    return () => { cancelled = true }
   }, [debouncedTerm])
 
   const handleOverlayClick = useCallback(
@@ -68,10 +86,9 @@ export function Search({ onClose, onSelectResult }: Props) {
                   weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
                 })}
               </div>
-              <div
-                className="search-result-snippet"
-                dangerouslySetInnerHTML={{ __html: result.snippet }}
-              />
+              <div className="search-result-snippet">
+                <SnippetText html={result.snippet} />
+              </div>
             </div>
           ))}
         </div>
