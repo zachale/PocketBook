@@ -27,6 +27,18 @@ function createWindow() {
   })
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    let retries = 0
+    const MAX_RETRIES = 10
+    win.webContents.on('did-fail-load', (_e, errorCode, _desc, _url, isMainFrame) => {
+      if (win.isDestroyed() || !isMainFrame || retries >= MAX_RETRIES) return
+      // Retry only on connection refused/aborted (Vite dev server not yet listening)
+      if (errorCode === -102 || errorCode === -101) {
+        retries++
+        setTimeout(() => {
+          if (!win.isDestroyed()) win.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
+        }, 500)
+      }
+    })
     win.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
   } else {
     win.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`))
