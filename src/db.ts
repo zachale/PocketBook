@@ -1,9 +1,26 @@
 import Database from 'better-sqlite3'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sqliteVec = require('sqlite-vec') as { load: (db: Database.Database) => void }
 import type { Entry, TimelineEntry, SearchResult, UpsertEntryArgs } from './shared/types'
+
+export interface Tag {
+  id: number
+  name: string
+  description: string
+  embedding: Buffer | null
+  embedding_model: string | null
+  created_at: number
+}
 
 export function createDb(path: string): Database.Database {
   const db = new Database(path)
   db.pragma('journal_mode = WAL')
+
+  try {
+    sqliteVec.load(db)
+  } catch (err) {
+    console.warn('[db] sqlite-vec failed to load (cosine ranking will fall back to JS):', err)
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS entries (
@@ -38,9 +55,84 @@ export function createDb(path: string): Database.Database {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tags (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      name            TEXT NOT NULL,
+      description     TEXT NOT NULL DEFAULT '',
+      embedding       BLOB,
+      embedding_model TEXT,
+      created_at      INTEGER NOT NULL,
+      UNIQUE (name COLLATE NOCASE)
+    );
+
+    CREATE TABLE IF NOT EXISTS entry_tags (
+      entry_id   INTEGER NOT NULL,
+      tag_id     INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (entry_id, tag_id),
+      FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id)   REFERENCES tags(id)    ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_entry_tags_entry ON entry_tags(entry_id);
+    CREATE INDEX IF NOT EXISTS idx_entry_tags_tag   ON entry_tags(tag_id);
   `)
 
+  // FK enforcement is per-connection in SQLite.
+  db.pragma('foreign_keys = ON')
+
   return db
+}
+
+// ── Tag helpers ─────────────────────────────────────────────────
+export function createTag(
+  db: Database.Database,
+  args: { name: string; description?: string },
+): Tag {
+  const now = Date.now()
+  const result = db.prepare(`
+    INSERT INTO tags (name, description, created_at) VALUES (?, ?, ?)
+  `).run(args.name, args.description ?? '', now)
+  return db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid) as Tag
+}
+
+export function listTags(db: Database.Database): Tag[] {
+  return db.prepare('SELECT * FROM tags ORDER BY name COLLATE NOCASE ASC').all() as Tag[]
+}
+
+export function findTagByName(db: Database.Database, name: string): Tag | null {
+  const row = db.prepare('SELECT * FROM tags WHERE name = ? COLLATE NOCASE').get(name) as Tag | undefined
+  return row ?? null
+}
+
+export function getTagsForEntry(db: Database.Database, entryId: number): Tag[] {
+  return db.prepare(`
+    SELECT t.* FROM tags t
+    JOIN entry_tags et ON et.tag_id = t.id
+    WHERE et.entry_id = ?
+    ORDER BY et.created_at ASC
+  `).all(entryId) as Tag[]
+}
+
+export function addTagToEntry(db: Database.Database, entryId: number, tagId: number): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO entry_tags (entry_id, tag_id, created_at) VALUES (?, ?, ?)
+  `).run(entryId, tagId, Date.now())
+}
+
+export function removeTagFromEntry(db: Database.Database, entryId: number, tagId: number): void {
+  db.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag_id = ?').run(entryId, tagId)
+}
+
+export function updateTagEmbedding(
+  db: Database.Database,
+  tagId: number,
+  embedding: Buffer,
+  model: string,
+): void {
+  db.prepare('UPDATE tags SET embedding = ?, embedding_model = ? WHERE id = ?')
+    .run(embedding, model, tagId)
 }
 
 export function getSetting(db: Database.Database, key: string): string | null {

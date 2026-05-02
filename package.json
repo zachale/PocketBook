@@ -61,6 +61,7 @@
     "marked": "^18.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "sqlite-vec": "^0.1.9",
     "tiptap-markdown": "^0.9.0"
   }
 }
