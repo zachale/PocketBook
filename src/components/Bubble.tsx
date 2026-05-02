@@ -12,6 +12,7 @@ interface Props {
   entry: Entry
   onNewBubble: () => void
   onDeleteBubble?: () => void
+  onEmptyChange?: (empty: boolean) => void
   autoFocus?: boolean
   fresh?: boolean
 }
@@ -47,12 +48,14 @@ function ActiveEditor({
   entry,
   onNewBubble,
   onDeleteBubble,
+  onEmptyChange,
   autoFocus,
   onHTMLChange,
 }: {
   entry: Entry
   onNewBubble: () => void
   onDeleteBubble?: () => void
+  onEmptyChange?: (empty: boolean) => void
   autoFocus: boolean
   onHTMLChange: (html: string) => void
 }) {
@@ -62,6 +65,8 @@ function ActiveEditor({
 
   const handlersRef = useRef<Handlers>({ onNewBubble, onDeleteBubble })
   handlersRef.current = { onNewBubble, onDeleteBubble }
+
+  const wasEmptyRef = useRef<boolean | null>(null)
 
   const save = useCallback((content: string) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -96,6 +101,11 @@ function ActiveEditor({
       const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
       onHTMLChange(editor.getHTML())
+      const isEmpty = editor.isEmpty
+      if (wasEmptyRef.current !== isEmpty) {
+        wasEmptyRef.current = isEmpty
+        onEmptyChange?.(isEmpty)
+      }
       try {
         const { view } = editor
         const { head } = view.state.selection
@@ -115,7 +125,7 @@ function ActiveEditor({
   return <EditorContent editor={editor} />
 }
 
-export function Bubble({ entry, onNewBubble, onDeleteBubble, autoFocus = false, fresh = false }: Props) {
+export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, autoFocus = false, fresh = false }: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
   const [cachedHTML, setCachedHTML] = useState(() =>
@@ -145,6 +155,7 @@ export function Bubble({ entry, onNewBubble, onDeleteBubble, autoFocus = false, 
           entry={entry}
           onNewBubble={onNewBubble}
           onDeleteBubble={onDeleteBubble}
+          onEmptyChange={onEmptyChange}
           autoFocus={autoFocus}
           onHTMLChange={setCachedHTML}
         />

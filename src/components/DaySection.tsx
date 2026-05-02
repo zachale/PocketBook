@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Bubble } from './Bubble'
 import type { Entry } from '../shared/types'
 
@@ -74,25 +74,38 @@ export function DaySection({
     [date, entries, isToday, onEntriesChange]
   )
 
+  const last = entries[entries.length - 1]
+  const initiallyEmpty = !last || !last.content || last.content.trim() === ''
+  const [lastEmpty, setLastEmpty] = useState(initiallyEmpty)
+
+  // Reset whenever the last entry's identity changes (new bubble appended/deleted)
+  useEffect(() => {
+    setLastEmpty(initiallyEmpty)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last?.id])
+
   // Hide past day sections that ended up empty (today always renders to keep writable bubble)
   if (!isToday && entries.length === 0) return null
 
-  const last = entries[entries.length - 1]
-  const showPill = entries.length > 0 && last && last.content && last.content.trim() !== ''
+  const showPill = entries.length > 0 && !lastEmpty
 
   return (
     <div className="day-section" data-date={date}>
       <div className="date-header">{formatDate(date, today)}</div>
-      {entries.map((entry, idx) => (
-        <Bubble
-          key={entry.id}
-          entry={entry}
-          fresh={freshIds.has(entry.id)}
-          onNewBubble={() => handleNewBubble(idx)}
-          onDeleteBubble={() => handleDeleteBubble(idx)}
-          autoFocus={isToday && idx === entries.length - 1}
-        />
-      ))}
+      {entries.map((entry, idx) => {
+        const isLast = idx === entries.length - 1
+        return (
+          <Bubble
+            key={entry.id}
+            entry={entry}
+            fresh={freshIds.has(entry.id)}
+            onNewBubble={() => handleNewBubble(idx)}
+            onDeleteBubble={() => handleDeleteBubble(idx)}
+            onEmptyChange={isLast ? setLastEmpty : undefined}
+            autoFocus={isToday && isLast}
+          />
+        )
+      })}
       {showPill && (
         <button
           type="button"
