@@ -79,4 +79,47 @@ describe('OpenRouterProvider', () => {
     expect(r.ok).toBe(false)
     expect(r.error).toBe('Invalid API key')
   })
+
+  it('generateStructured passes response_format and parses JSON content', async () => {
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"a":1,"b":"x"}' } }] }),
+    })
+    const p = new OpenRouterProvider({
+      provider: 'openrouter', apiKey: 'k', embeddingModel: 'e', llmModel: 'l',
+    })
+    const result = await p.generateStructured<{ a: number; b: string }>(
+      [{ role: 'user', content: 'hi' }],
+      { type: 'object', properties: { a: { type: 'number' }, b: { type: 'string' } } },
+    )
+    expect(result).toEqual({ a: 1, b: 'x' })
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.response_format.type).toBe('json_schema')
+    expect(body.response_format.json_schema.strict).toBe(true)
+  })
+})
+
+describe('OllamaProvider.generateStructured', () => {
+  beforeEach(() => { global.fetch = vi.fn() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('passes schema as format and parses JSON content', async () => {
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: '{"ranked":["a","b"]}' } }),
+    })
+    const p = new OllamaProvider({ provider: 'ollama', baseUrl: 'http://x', embeddingModel: '', llmModel: 'l' })
+    const result = await p.generateStructured<{ ranked: string[] }>(
+      [{ role: 'user', content: 'rank' }],
+      { type: 'object', properties: { ranked: { type: 'array' } } },
+    )
+    expect(result).toEqual({ ranked: ['a', 'b'] })
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.format).toEqual({ type: 'object', properties: { ranked: { type: 'array' } } })
+    expect(body.stream).toBe(false)
+  })
 })

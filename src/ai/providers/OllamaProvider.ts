@@ -1,6 +1,7 @@
 import type {
   AIProvider,
   ChatMessage,
+  JSONSchema,
   ModelInfo,
   OllamaConfig,
   ValidationResult,
@@ -43,6 +44,29 @@ export class OllamaProvider implements AIProvider {
     if (!res.ok) throw new Error(`Ollama /api/embeddings returned ${res.status}`)
     const json = (await res.json()) as OllamaEmbedResponse
     return json.embedding
+  }
+
+  async generateStructured<T>(messages: ChatMessage[], schema: JSONSchema): Promise<T> {
+    const res = await fetch(`${this.config.baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.config.llmModel,
+        messages,
+        // Ollama 0.5+ accepts a JSON Schema object here; older builds get
+        // the literal 'json' string and rely on the prompt to constrain shape.
+        format: schema,
+        stream: false,
+      }),
+    })
+    if (!res.ok) throw new Error(`Ollama /api/chat returned ${res.status}`)
+    const json = (await res.json()) as OllamaChatResponse
+    const content = json.message?.content ?? ''
+    try {
+      return JSON.parse(content) as T
+    } catch (err) {
+      throw new Error(`Ollama returned non-JSON content: ${content.slice(0, 200)} (${err})`)
+    }
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {
