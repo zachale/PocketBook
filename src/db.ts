@@ -33,9 +33,30 @@ export function createDb(path: string): Database.Database {
     CREATE TRIGGER IF NOT EXISTS entries_ad AFTER DELETE ON entries BEGIN
       DELETE FROM fts_entries WHERE entry_id = old.id;
     END;
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `)
 
   return db
+}
+
+export function getSetting(db: Database.Database, key: string): string | null {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setSetting(db: Database.Database, key: string, value: string): void {
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value)
+}
+
+export function deleteSetting(db: Database.Database, key: string): void {
+  db.prepare('DELETE FROM settings WHERE key = ?').run(key)
 }
 
 export function upsertEntry(db: Database.Database, args: UpsertEntryArgs): Entry {

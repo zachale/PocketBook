@@ -21,6 +21,14 @@ beforeEach(() => {
     deleteEntry: vi.fn(),
     getTimelineIndex: vi.fn(),
     searchEntries: vi.fn(),
+    ai: {
+      getConfig: vi.fn(),
+      saveConfig: vi.fn(),
+      listOllamaModels: vi.fn(),
+      validateConfig: vi.fn(),
+      embed: vi.fn(),
+      chat: vi.fn(),
+    },
   }
 })
 

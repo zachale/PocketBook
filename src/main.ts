@@ -2,11 +2,17 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import { createDb, upsertEntry, getEntriesForDates, deleteEntry, getTimelineIndex, searchEntries } from './db'
 import type { UpsertEntryArgs } from './shared/types'
+import type { AIProvider, AIProviderConfig, ChatMessage, ModelInfo } from './shared/ai/types'
+import { OLLAMA_DEFAULT_BASE_URL } from './shared/ai/presets'
+import { createProvider } from './ai/registry'
+import { OllamaProvider } from './ai/providers/OllamaProvider'
+import { loadConfig, saveConfig, publicView } from './ai/settings'
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string
 declare const MAIN_WINDOW_VITE_NAME: string
 
 let db: ReturnType<typeof createDb>
+let activeProvider: AIProvider | null = null
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -54,6 +60,15 @@ function wrap<T>(channel: string, fn: () => T): T {
   }
 }
 
+async function wrapAsync<T>(channel: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    console.error(`[ipc] ${channel}`, err)
+    throw err
+  }
+}
+
 ipcMain.handle('get-entries-for-dates', (_e, dates: string[]) =>
   wrap('get-entries-for-dates', () => getEntriesForDates(db, dates))
 )
@@ -74,8 +89,65 @@ ipcMain.handle('search-entries', (_e, term: string) =>
   wrap('search-entries', () => searchEntries(db, term))
 )
 
+// ── AI provider IPC ─────────────────────────────────────────────
+ipcMain.handle('ai:get-config', () =>
+  wrap('ai:get-config', () => {
+    const cfg = loadConfig(db)
+    return cfg ? publicView(cfg) : null
+  })
+)
+
+ipcMain.handle('ai:save-config', (_e, config: AIProviderConfig) =>
+  wrapAsync('ai:save-config', async () => {
+    const provider = createProvider(config)
+    const result = await provider.validate()
+    if (!result.ok) return result
+    saveConfig(db, config)
+    activeProvider = provider
+    return { ok: true }
+  })
+)
+
+ipcMain.handle('ai:list-ollama-models', (_e, baseUrl?: string) =>
+  wrapAsync('ai:list-ollama-models', async (): Promise<ModelInfo[]> => {
+    const probe = new OllamaProvider({
+      provider: 'ollama',
+      baseUrl: baseUrl || OLLAMA_DEFAULT_BASE_URL,
+      embeddingModel: '',
+      llmModel: '',
+    })
+    return probe.listModels()
+  })
+)
+
+ipcMain.handle('ai:validate-config', (_e, config: AIProviderConfig) =>
+  wrapAsync('ai:validate-config', () => createProvider(config).validate())
+)
+
+ipcMain.handle('ai:embed', (_e, text: string) =>
+  wrapAsync('ai:embed', () => {
+    if (!activeProvider) throw new Error('no provider configured')
+    return activeProvider.embed(text)
+  })
+)
+
+ipcMain.handle('ai:chat', (_e, messages: ChatMessage[]) =>
+  wrapAsync('ai:chat', () => {
+    if (!activeProvider) throw new Error('no provider configured')
+    return activeProvider.chat(messages)
+  })
+)
+
 app.whenReady().then(() => {
   db = createDb(path.join(app.getPath('userData'), 'pocketbook.db'))
+  const stored = loadConfig(db)
+  if (stored) {
+    try {
+      activeProvider = createProvider(stored)
+    } catch (err) {
+      console.error('[main] failed to instantiate stored AI provider', err)
+    }
+  }
   createWindow()
 })
 

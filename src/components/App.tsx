@@ -3,6 +3,7 @@ import { DaySection } from './DaySection'
 import { Scrubber } from './Scrubber'
 import { Search } from './Search'
 import { Titlebar } from './Titlebar'
+import { Onboarding } from './Onboarding'
 import type { Entry, TimelineEntry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
@@ -17,6 +18,7 @@ export function App() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [freshIds, setFreshIds] = useState<Set<number>>(() => new Set())
+  const [aiConfigStatus, setAiConfigStatus] = useState<'loading' | 'needed' | 'ready'>('loading')
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -81,6 +83,16 @@ export function App() {
     }
     init()
   }, [today])
+
+  // Detect whether AI provider is configured; show onboarding if not.
+  useEffect(() => {
+    window.api.ai.getConfig()
+      .then(cfg => setAiConfigStatus(cfg ? 'ready' : 'needed'))
+      .catch(err => {
+        console.error('[App] ai.getConfig failed', err)
+        setAiConfigStatus('ready') // fail open — don't block the journal
+      })
+  }, [])
 
   // Cmd+F to open search, Escape to close
   useEffect(() => {
@@ -150,6 +162,10 @@ export function App() {
             handleJumpToDate(date)
           }}
         />
+      )}
+
+      {aiConfigStatus === 'needed' && (
+        <Onboarding onComplete={() => setAiConfigStatus('ready')} />
       )}
     </div>
   )
