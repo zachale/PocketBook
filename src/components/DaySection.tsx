@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Bubble } from './Bubble'
 import type { Entry } from '../shared/types'
 
@@ -74,19 +74,23 @@ export function DaySection({
     [date, entries, isToday, onEntriesChange]
   )
 
-  const last = entries[entries.length - 1]
-  const initiallyEmpty = !last || !last.content || last.content.trim() === ''
-  const [lastEmpty, setLastEmpty] = useState(initiallyEmpty)
+  // Track each bubble's live emptiness so we can derive lastEmpty even after
+  // delete/reorder operations where App state's entry.content lags behind
+  // the debounced save.
+  const [emptyMap, setEmptyMap] = useState<Record<number, boolean>>({})
 
-  // Reset whenever the last entry's identity changes (new bubble appended/deleted)
-  useEffect(() => {
-    setLastEmpty(initiallyEmpty)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [last?.id])
+  const handleEmptyChange = useCallback((id: number, empty: boolean) => {
+    setEmptyMap(prev => (prev[id] === empty ? prev : { ...prev, [id]: empty }))
+  }, [])
 
-  // Hide past day sections that ended up empty (today always renders to keep writable bubble)
   if (!isToday && entries.length === 0) return null
 
+  const last = entries[entries.length - 1]
+  const lastEmpty = last
+    ? (last.id in emptyMap
+        ? emptyMap[last.id]
+        : !last.content || last.content.trim() === '')
+    : true
   const showPill = entries.length > 0 && !lastEmpty
 
   return (
@@ -101,7 +105,7 @@ export function DaySection({
             fresh={freshIds.has(entry.id)}
             onNewBubble={() => handleNewBubble(idx)}
             onDeleteBubble={() => handleDeleteBubble(idx)}
-            onEmptyChange={isLast ? setLastEmpty : undefined}
+            onEmptyChange={(empty) => handleEmptyChange(entry.id, empty)}
             autoFocus={isToday && isLast}
           />
         )

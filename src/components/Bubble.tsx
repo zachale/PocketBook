@@ -28,6 +28,8 @@ function BubbleKeysExtension(handlersRef: React.MutableRefObject<Handlers>) {
     addKeyboardShortcuts() {
       return {
         'Mod-Enter': () => {
+          // Refuse to spawn a new bubble when the current one is empty
+          if (this.editor.isEmpty) return true
           handlersRef.current.onNewBubble()
           return true
         },
