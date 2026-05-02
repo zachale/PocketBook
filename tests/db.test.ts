@@ -31,16 +31,26 @@ describe('upsertEntry', () => {
 })
 
 describe('getEntriesForDates', () => {
-  it('returns entries for requested dates ordered by position', () => {
-    // Insert at position 0 first, then at position 1 — no shifting needed
+  it('returns entries for requested dates ordered by creation time', () => {
     upsertEntry(db, { date: '2026-05-01', position: 0, content: 'first' })
     upsertEntry(db, { date: '2026-05-01', position: 1, content: 'second' })
     upsertEntry(db, { date: '2026-04-30', position: 0, content: 'yesterday' })
 
     const results = getEntriesForDates(db, ['2026-05-01'])
     expect(results).toHaveLength(2)
-    expect(results[0].position).toBe(0)
-    expect(results[1].position).toBe(1)
+    expect(results[0].content).toBe('first')
+    expect(results[1].content).toBe('second')
+  })
+
+  it('orders chronologically even when positions are out of order', () => {
+    // Reproduce the user-reported bug: older entry has higher position
+    // (e.g. due to historical insert/delete shuffling).
+    upsertEntry(db, { date: '2026-05-01', position: 3, content: 'older' })
+    upsertEntry(db, { date: '2026-05-01', position: 1, content: 'newer' })
+
+    const results = getEntriesForDates(db, ['2026-05-01'])
+    expect(results[0].content).toBe('older')
+    expect(results[1].content).toBe('newer')
   })
 
   it('returns empty array for dates with no entries', () => {

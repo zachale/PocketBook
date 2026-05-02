@@ -97,8 +97,11 @@ export function getEntriesForDates(db: Database.Database, dates: string[]): Entr
     throw new Error(`getEntriesForDates: too many dates requested (max 999, got ${dates.length})`)
   }
   const placeholders = dates.map(() => '?').join(',')
+  // Order by creation time within each day so the user always sees their entries
+  // in the order they wrote them. `position` is kept for forward compatibility
+  // (e.g. drag-to-reorder) but is no longer the source of truth.
   return db.prepare(`
-    SELECT * FROM entries WHERE date IN (${placeholders}) ORDER BY date DESC, position ASC
+    SELECT * FROM entries WHERE date IN (${placeholders}) ORDER BY date DESC, created_at ASC, id ASC
   `).all(...dates) as Entry[]
 }
 

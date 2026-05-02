@@ -54,7 +54,7 @@ export function App() {
         if (!map[e.date]) map[e.date] = []
         map[e.date].push(e)
       }
-      for (const d of dates) map[d].sort((a, b) => a.position - b.position)
+      for (const d of dates) map[d].sort((a, b) => a.created_at - b.created_at)
 
       // Cleanup empty entries from past days
       let timelineDirty = false
