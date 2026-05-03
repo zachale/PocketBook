@@ -4,8 +4,6 @@ import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
 import { Placeholder } from '@tiptap/extension-placeholder'
 import { Extension } from '@tiptap/core'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import type { Entry } from '../shared/types'
 import type { TagSuggestion } from '../shared/ai/tag-types'
 import { TagBar } from './TagBar'
@@ -19,12 +17,6 @@ interface Props {
   autoFocus?: boolean
   fresh?: boolean
   aiReady?: boolean
-  /**
-   * Pre-rendered, already-sanitized HTML. When supplied, the bubble uses this
-   * for its inactive (non-editor) view and skips marked.parse + sanitize on
-   * mount — eliminating the flash of raw markdown during initial paint.
-   */
-  prerenderedHTML?: string
 }
 
 interface Handlers {
@@ -55,8 +47,7 @@ function BubbleKeysExtension(handlersRef: React.MutableRefObject<Handlers>) {
   })
 }
 
-// ActiveEditor is a separate component so useEditor only runs when visible
-function ActiveEditor({
+function EntryEditor({
   entry,
   onNewBubble,
   onDeleteBubble,
@@ -64,7 +55,6 @@ function ActiveEditor({
   onTextChange,
   onFocusChange,
   autoFocus,
-  onHTMLChange,
 }: {
   entry: Entry
   onNewBubble: () => void
@@ -73,7 +63,6 @@ function ActiveEditor({
   onTextChange?: (text: string) => void
   onFocusChange?: (focused: boolean) => void
   autoFocus: boolean
-  onHTMLChange: (html: string) => void
 }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const entryRef = useRef(entry)
@@ -116,7 +105,6 @@ function ActiveEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
-      onHTMLChange(editor.getHTML())
       onTextChange?.(content)
       const isEmpty = editor.isEmpty
       if (wasEmptyRef.current !== isEmpty) {
@@ -164,27 +152,7 @@ export function Bubble({
   autoFocus = false,
   fresh = false,
   aiReady = false,
-  prerenderedHTML,
 }: Props) {
-  const bubbleRef = useRef<HTMLDivElement>(null)
-  const [isVisible, setIsVisible] = useState(autoFocus)
-  // Prefer pre-rendered HTML (already sanitized upstream). Fall back to
-  // parsing on mount only when the parent didn't pre-render.
-  const prerenderedRef = useRef(prerenderedHTML)
-  const [cachedHTML, setCachedHTML] = useState(() => {
-    if (prerenderedHTML !== undefined) return prerenderedHTML
-    return entry.content ? (marked.parse(entry.content) as string) : ''
-  })
-
-  // If the parent supplies pre-rendered HTML after mount (e.g. lazy load
-  // resolved), adopt it.
-  useEffect(() => {
-    if (prerenderedHTML !== undefined && prerenderedHTML !== prerenderedRef.current) {
-      prerenderedRef.current = prerenderedHTML
-      setCachedHTML(prerenderedHTML)
-    }
-  }, [prerenderedHTML])
-
   const [liveText, setLiveText] = useState(entry.content)
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
   const [isFocused, setIsFocused] = useState(false)
@@ -222,38 +190,20 @@ export function Bubble({
     },
   })
 
-  useEffect(() => {
-    const el = bubbleRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([obs]) => setIsVisible(obs.isIntersecting),
-      { rootMargin: '400px' }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
   return (
     <div
-      ref={bubbleRef}
       data-entry-id={entry.id}
       className={`bubble${fresh ? ' fresh' : ''}`}
-      onClick={() => setIsVisible(true)}
     >
-      {isVisible ? (
-        <ActiveEditor
-          entry={entry}
-          onNewBubble={onNewBubble}
-          onDeleteBubble={onDeleteBubble}
-          onEmptyChange={onEmptyChange}
-          onTextChange={setLiveText}
-          onFocusChange={handleFocusChange}
-          autoFocus={autoFocus}
-          onHTMLChange={setCachedHTML}
-        />
-      ) : (
-        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cachedHTML) }} />
-      )}
+      <EntryEditor
+        entry={entry}
+        onNewBubble={onNewBubble}
+        onDeleteBubble={onDeleteBubble}
+        onEmptyChange={onEmptyChange}
+        onTextChange={setLiveText}
+        onFocusChange={handleFocusChange}
+        autoFocus={autoFocus}
+      />
       <TagBar entryId={entry.id} suggestions={suggestions} />
     </div>
   )

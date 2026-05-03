@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { DaySection } from './DaySection'
 import { Search } from './Search'
 import { Titlebar } from './Titlebar'
@@ -15,15 +13,8 @@ function todayStr(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-function renderMarkdown(content: string): string {
-  if (!content) return ''
-  const raw = marked.parse(content) as string
-  return DOMPurify.sanitize(raw)
-}
-
 export function App() {
   const [dayMap, setDayMap] = useState<DayMap>({})
-  const [htmlMap, setHtmlMap] = useState<Record<number, string>>({})
   const [allDates, setAllDates] = useState<string[]>([])
   const [loadedCount, setLoadedCount] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -52,8 +43,8 @@ export function App() {
     }, 500)
   }, [])
 
-  // Fetch entries for a slice of dates, prerender markdown, drop empties on
-  // past days, and merge into state. Returns the dates that survived cleanup.
+  // Fetch entries for a slice of dates, drop empties on past days, merge into
+  // state. Returns the dates that survived cleanup.
   const fetchChunk = useCallback(async (dates: string[]): Promise<string[]> => {
     if (dates.length === 0) return []
     const entries = await window.api.getEntriesForDates(dates)
@@ -63,7 +54,6 @@ export function App() {
     for (const e of entries) (grouped[e.date] ??= []).push(e)
     for (const d of dates) grouped[d].sort((a, b) => a.created_at - b.created_at)
 
-    // Cleanup empties on past days
     const survived: string[] = []
     for (const d of dates) {
       if (d === today) { survived.push(d); continue }
@@ -73,13 +63,7 @@ export function App() {
       if (grouped[d].length > 0) survived.push(d)
     }
 
-    const newHtml: Record<number, string> = {}
-    for (const d of dates) {
-      for (const e of grouped[d]) newHtml[e.id] = renderMarkdown(e.content)
-    }
-
     setDayMap(prev => ({ ...prev, ...grouped }))
-    setHtmlMap(prev => ({ ...prev, ...newHtml }))
     return survived
   }, [today])
 
@@ -103,7 +87,6 @@ export function App() {
       if (!todayHas) {
         const empty = await window.api.upsertEntry({ date: today, position: 0, content: '' })
         setDayMap(prev => ({ ...prev, [today]: [empty] }))
-        setHtmlMap(prev => ({ ...prev, [empty.id]: '' }))
       }
 
       setLoadedCount(firstSlice.length)
@@ -195,7 +178,6 @@ export function App() {
             today={today}
             entries={dayMap[date] ?? []}
             isToday={date === today}
-            htmlMap={htmlMap}
             freshIds={freshIds}
             aiReady={aiConfigStatus === 'ready'}
             onEntriesChange={handleEntriesChange}

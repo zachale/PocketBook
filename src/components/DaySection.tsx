@@ -7,7 +7,6 @@ interface Props {
   today: string
   entries: Entry[]
   isToday: boolean
-  htmlMap: Record<number, string>
   freshIds: Set<number>
   aiReady: boolean
   onEntriesChange: (date: string, entries: Entry[]) => void
@@ -34,7 +33,6 @@ export function DaySection({
   today,
   entries,
   isToday,
-  htmlMap,
   freshIds,
   aiReady,
   onEntriesChange,
@@ -105,7 +103,6 @@ export function DaySection({
           <Bubble
             key={entry.id}
             entry={entry}
-            prerenderedHTML={htmlMap[entry.id]}
             fresh={freshIds.has(entry.id)}
             aiReady={aiReady}
             onNewBubble={() => handleNewBubble(idx)}
