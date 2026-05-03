@@ -131,6 +131,62 @@ body {
   animation: pb-bubble-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* ── Skeleton bubble (lazy-load placeholder) ────────────────── */
+.bubble.skeleton {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.42);
+  position: relative;
+  overflow: hidden;
+}
+
+.bubble.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  transform: translateX(-100%);
+  animation: pb-skeleton-shimmer 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.skeleton-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 1;
+  max-height: 4000px;
+  overflow: hidden;
+  transition: opacity 240ms ease, max-height 280ms ease;
+}
+
+.skeleton-layer.fading {
+  opacity: 0;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.entries-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.entries-layer.visible {
+  opacity: 1;
+}
+
+@keyframes pb-skeleton-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ── ProseMirror (Tiptap editor) ────────────────────────────── */
 .ProseMirror {
   outline: none;

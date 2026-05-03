@@ -15,6 +15,12 @@ interface Props {
   onEmptyChange?: (empty: boolean) => void
   autoFocus?: boolean
   fresh?: boolean
+  /**
+   * Pre-rendered, already-sanitized HTML. When supplied, the bubble uses this
+   * for its inactive (non-editor) view and skips marked.parse + sanitize on
+   * mount — eliminating the flash of raw markdown during initial paint.
+   */
+  prerenderedHTML?: string
 }
 
 interface Handlers {
@@ -127,12 +133,25 @@ function ActiveEditor({
   return <EditorContent editor={editor} />
 }
 
-export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, autoFocus = false, fresh = false }: Props) {
+export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, autoFocus = false, fresh = false, prerenderedHTML }: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
-  const [cachedHTML, setCachedHTML] = useState(() =>
-    entry.content ? (marked.parse(entry.content) as string) : ''
-  )
+  // Prefer pre-rendered HTML (already sanitized upstream). Fall back to
+  // parsing on mount only when the parent didn't pre-render.
+  const prerenderedRef = useRef(prerenderedHTML)
+  const [cachedHTML, setCachedHTML] = useState(() => {
+    if (prerenderedHTML !== undefined) return prerenderedHTML
+    return entry.content ? (marked.parse(entry.content) as string) : ''
+  })
+
+  // If the parent supplies pre-rendered HTML after mount (e.g. lazy load
+  // resolved), adopt it.
+  useEffect(() => {
+    if (prerenderedHTML !== undefined && prerenderedHTML !== prerenderedRef.current) {
+      prerenderedRef.current = prerenderedHTML
+      setCachedHTML(prerenderedHTML)
+    }
+  }, [prerenderedHTML])
 
   useEffect(() => {
     const el = bubbleRef.current
