@@ -4,9 +4,10 @@ import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
 import { Placeholder } from '@tiptap/extension-placeholder'
 import { Extension } from '@tiptap/core'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import type { Entry } from '../shared/types'
+import type { TagSuggestion } from '../shared/ai/tag-types'
+import { TagBar } from './TagBar'
+import { useSuggestionTrigger } from '../hooks/useSuggestionTrigger'
 
 interface Props {
   entry: Entry
@@ -15,6 +16,7 @@ interface Props {
   onEmptyChange?: (empty: boolean) => void
   autoFocus?: boolean
   fresh?: boolean
+  aiReady?: boolean
 }
 
 interface Handlers {
@@ -45,21 +47,22 @@ function BubbleKeysExtension(handlersRef: React.MutableRefObject<Handlers>) {
   })
 }
 
-// ActiveEditor is a separate component so useEditor only runs when visible
-function ActiveEditor({
+function EntryEditor({
   entry,
   onNewBubble,
   onDeleteBubble,
   onEmptyChange,
+  onTextChange,
+  onFocusChange,
   autoFocus,
-  onHTMLChange,
 }: {
   entry: Entry
   onNewBubble: () => void
   onDeleteBubble?: () => void
   onEmptyChange?: (empty: boolean) => void
+  onTextChange?: (text: string) => void
+  onFocusChange?: (focused: boolean) => void
   autoFocus: boolean
-  onHTMLChange: (html: string) => void
 }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const entryRef = useRef(entry)
@@ -102,7 +105,7 @@ function ActiveEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const content = (editor.storage as any).markdown.getMarkdown() as string
       save(content)
-      onHTMLChange(editor.getHTML())
+      onTextChange?.(content)
       const isEmpty = editor.isEmpty
       if (wasEmptyRef.current !== isEmpty) {
         wasEmptyRef.current = isEmpty
@@ -124,46 +127,84 @@ function ActiveEditor({
 
   useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }, [])
 
+  useEffect(() => {
+    if (!editor) return
+    const handleFocus = () => onFocusChange?.(true)
+    const handleBlur = () => onFocusChange?.(false)
+    editor.on('focus', handleFocus)
+    editor.on('blur', handleBlur)
+    // Seed initial focus state (Tiptap autofocus mounts with isFocused=true)
+    if (editor.isFocused) onFocusChange?.(true)
+    return () => {
+      editor.off('focus', handleFocus)
+      editor.off('blur', handleBlur)
+    }
+  }, [editor, onFocusChange])
+
   return <EditorContent editor={editor} />
 }
 
-export function Bubble({ entry, onNewBubble, onDeleteBubble, onEmptyChange, autoFocus = false, fresh = false }: Props) {
-  const bubbleRef = useRef<HTMLDivElement>(null)
-  const [isVisible, setIsVisible] = useState(autoFocus)
-  const [cachedHTML, setCachedHTML] = useState(() =>
-    entry.content ? (marked.parse(entry.content) as string) : ''
-  )
+export function Bubble({
+  entry,
+  onNewBubble,
+  onDeleteBubble,
+  onEmptyChange,
+  autoFocus = false,
+  fresh = false,
+  aiReady = false,
+}: Props) {
+  const [liveText, setLiveText] = useState(entry.content)
+  const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
+  const [isFocused, setIsFocused] = useState(false)
+  // Generation counter: bumped on every fire so stale in-flight responses from
+  // earlier requests can't overwrite a newer result.
+  const suggestGenRef = useRef(0)
 
-  useEffect(() => {
-    const el = bubbleRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([obs]) => setIsVisible(obs.isIntersecting),
-      { rootMargin: '400px' }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
+  const handleFocusChange = useCallback((focused: boolean) => {
+    setIsFocused(focused)
   }, [])
+
+  // Hydrate persisted suggestions on mount so they survive blur and reload
+  // without redoing the LLM work.
+  useEffect(() => {
+    let cancelled = false
+    window.api.tags.getSuggestions(entry.id)
+      .then(saved => { if (!cancelled && saved.length > 0) setSuggestions(saved) })
+      .catch(err => console.warn('[Bubble] getSuggestions failed', err))
+    return () => { cancelled = true }
+  }, [entry.id])
+
+  useSuggestionTrigger({
+    content: liveText,
+    enabled: aiReady && isFocused,
+    onTrigger: async (text) => {
+      const myGen = ++suggestGenRef.current
+      try {
+        const r = await window.api.tags.suggest(entry.id, text)
+        if (suggestGenRef.current !== myGen) return
+        setSuggestions(r)
+      } catch (err) {
+        if (suggestGenRef.current !== myGen) return
+        console.warn('[Bubble] suggest failed', err)
+      }
+    },
+  })
 
   return (
     <div
-      ref={bubbleRef}
       data-entry-id={entry.id}
       className={`bubble${fresh ? ' fresh' : ''}`}
-      onClick={() => setIsVisible(true)}
     >
-      {isVisible ? (
-        <ActiveEditor
-          entry={entry}
-          onNewBubble={onNewBubble}
-          onDeleteBubble={onDeleteBubble}
-          onEmptyChange={onEmptyChange}
-          autoFocus={autoFocus}
-          onHTMLChange={setCachedHTML}
-        />
-      ) : (
-        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cachedHTML) }} />
-      )}
+      <EntryEditor
+        entry={entry}
+        onNewBubble={onNewBubble}
+        onDeleteBubble={onDeleteBubble}
+        onEmptyChange={onEmptyChange}
+        onTextChange={setLiveText}
+        onFocusChange={handleFocusChange}
+        autoFocus={autoFocus}
+      />
+      <TagBar entryId={entry.id} suggestions={suggestions} />
     </div>
   )
 }

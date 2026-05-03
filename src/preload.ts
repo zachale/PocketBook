@@ -26,4 +26,14 @@ contextBridge.exposeInMainWorld('api', {
     embed: (text: string) => ipcRenderer.invoke('ai:embed', text),
     chat: (messages: ChatMessage[]) => ipcRenderer.invoke('ai:chat', messages),
   },
+
+  tags: {
+    list: () => ipcRenderer.invoke('tags:list'),
+    forEntry: (entryId: number) => ipcRenderer.invoke('tags:for-entry', entryId),
+    create: (input: { name: string; description?: string }) => ipcRenderer.invoke('tags:create', input),
+    add: (entryId: number, tagId: number) => ipcRenderer.invoke('tags:add', entryId, tagId),
+    remove: (entryId: number, tagId: number) => ipcRenderer.invoke('tags:remove', entryId, tagId),
+    suggest: (entryId: number, content: string) => ipcRenderer.invoke('tags:suggest', entryId, content),
+    getSuggestions: (entryId: number) => ipcRenderer.invoke('tags:get-suggestions', entryId),
+  },
 })

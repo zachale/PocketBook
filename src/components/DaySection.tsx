@@ -8,6 +8,7 @@ interface Props {
   entries: Entry[]
   isToday: boolean
   freshIds: Set<number>
+  aiReady: boolean
   onEntriesChange: (date: string, entries: Entry[]) => void
   onAddEntry: (date: string) => void
   onMarkFresh: (id: number) => void
@@ -33,6 +34,7 @@ export function DaySection({
   entries,
   isToday,
   freshIds,
+  aiReady,
   onEntriesChange,
   onAddEntry,
   onMarkFresh,
@@ -54,7 +56,6 @@ export function DaySection({
 
   const handleDeleteBubble = useCallback(
     async (idx: number) => {
-      // Refuse to delete the only writable bubble on today
       if (isToday && entries.length <= 1) return
       const entry = entries[idx]
       if (!entry) return
@@ -103,10 +104,11 @@ export function DaySection({
             key={entry.id}
             entry={entry}
             fresh={freshIds.has(entry.id)}
+            aiReady={aiReady}
             onNewBubble={() => handleNewBubble(idx)}
             onDeleteBubble={() => handleDeleteBubble(idx)}
             onEmptyChange={(empty) => handleEmptyChange(entry.id, empty)}
-            autoFocus={isToday && isLast}
+            autoFocus={freshIds.has(entry.id) || (isToday && isLast)}
           />
         )
       })}

@@ -1,6 +1,7 @@
 import type {
   AIProvider,
   ChatMessage,
+  JSONSchema,
   ModelInfo,
   OpenRouterConfig,
   ValidationResult,
@@ -66,6 +67,29 @@ export class OpenRouterProvider implements AIProvider {
     if (!res.ok) throw new Error(`OpenRouter /chat/completions returned ${res.status}`)
     const json = (await res.json()) as OpenRouterChatResponse
     return json.choices?.[0]?.message?.content ?? ''
+  }
+
+  async generateStructured<T>(messages: ChatMessage[], schema: JSONSchema): Promise<T> {
+    const res = await fetch(`${BASE}/chat/completions`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({
+        model: this.config.llmModel,
+        messages,
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'output', schema, strict: true },
+        },
+      }),
+    })
+    if (!res.ok) throw new Error(`OpenRouter /chat/completions returned ${res.status}`)
+    const json = (await res.json()) as OpenRouterChatResponse
+    const content = json.choices?.[0]?.message?.content ?? ''
+    try {
+      return JSON.parse(content) as T
+    } catch (err) {
+      throw new Error(`OpenRouter returned non-JSON content: ${content.slice(0, 200)} (${err})`)
+    }
   }
 
   async validate(): Promise<ValidationResult> {

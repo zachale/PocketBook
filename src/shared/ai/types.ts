@@ -12,10 +12,20 @@ export interface ChatMessage {
   content: string
 }
 
+// Minimal JSON Schema shape we accept. Both Ollama (format: schema) and
+// OpenRouter (response_format.json_schema) understand this surface.
+export interface JSONSchema {
+  type: 'object'
+  properties: Record<string, unknown>
+  required?: string[]
+  additionalProperties?: boolean
+}
+
 export interface AIProvider {
   readonly id: AIProviderId
   embed(text: string): Promise<number[]>
   chat(messages: ChatMessage[]): Promise<string>
+  generateStructured<T>(messages: ChatMessage[], schema: JSONSchema): Promise<T>
   listModels(): Promise<ModelInfo[]>
   validate(): Promise<ValidationResult>
 }
