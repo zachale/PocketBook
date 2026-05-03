@@ -20,6 +20,7 @@ interface Window {
       add: (entryId: number, tagId: number) => Promise<void>
       remove: (entryId: number, tagId: number) => Promise<void>
       suggest: (entryId: number, content: string) => Promise<import('./shared/ai/tag-types').TagSuggestion[]>
+      getSuggestions: (entryId: number) => Promise<import('./shared/ai/tag-types').TagSuggestion[]>
     }
   }
 }

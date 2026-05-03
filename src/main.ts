@@ -167,6 +167,10 @@ ipcMain.handle('tags:suggest', (_e, entryId: number, content: string) =>
   wrapAsync('tags:suggest', () => tagService!.suggest(entryId, content))
 )
 
+ipcMain.handle('tags:get-suggestions', (_e, entryId: number) =>
+  wrap('tags:get-suggestions', () => tagService!.getSaved(entryId))
+)
+
 app.whenReady().then(() => {
   db = createDb(path.join(app.getPath('userData'), 'pocketbook.db'))
   const stored = loadConfig(db)

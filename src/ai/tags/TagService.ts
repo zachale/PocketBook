@@ -9,6 +9,8 @@ import {
   removeTagFromEntry as dbRemoveTag,
   findTagByName,
   updateTagEmbedding,
+  getSuggestionsForEntry,
+  saveSuggestionsForEntry,
   type Tag,
 } from '../../db'
 import { stripMarkdown, chunkWords } from './chunking'
@@ -84,6 +86,11 @@ export class TagService {
     dbRemoveTag(this.db, entryId, tagId)
   }
 
+  /** Read-only — returns the persisted suggestions if any (no LLM work). */
+  getSaved(entryId: number): TagSuggestion[] {
+    return getSuggestionsForEntry(this.db, entryId)?.suggestions ?? []
+  }
+
   async suggest(entryId: number, content: string): Promise<TagSuggestion[]> {
     const provider = this.getProvider()
     const model = this.getEmbeddingModel()
@@ -93,8 +100,17 @@ export class TagService {
     if (stripped.split(/\s+/).filter(Boolean).length < 5) return []
 
     const hash = `${model}:${stripped.length}:${stripped}`
+
+    // In-memory cache (this run)
     const cached = this.lastByEntry.get(entryId)
     if (cached?.hash === hash) return cached.result
+
+    // DB cache (survives restarts) — hydrate the in-memory cache too
+    const saved = getSuggestionsForEntry(this.db, entryId)
+    if (saved && saved.hash === hash) {
+      this.lastByEntry.set(entryId, { hash, result: saved.suggestions })
+      return saved.suggestions
+    }
 
     const inflight = this.inflight.get(entryId)
     if (inflight) return inflight
@@ -102,6 +118,11 @@ export class TagService {
     const promise = this.runPipeline(entryId, stripped, provider, model)
       .then(result => {
         this.lastByEntry.set(entryId, { hash, result })
+        try {
+          saveSuggestionsForEntry(this.db, entryId, hash, result)
+        } catch (err) {
+          console.warn('[TagService] failed to persist suggestions', err)
+        }
         return result
       })
       .finally(() => this.inflight.delete(entryId))

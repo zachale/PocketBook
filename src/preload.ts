@@ -34,5 +34,6 @@ contextBridge.exposeInMainWorld('api', {
     add: (entryId: number, tagId: number) => ipcRenderer.invoke('tags:add', entryId, tagId),
     remove: (entryId: number, tagId: number) => ipcRenderer.invoke('tags:remove', entryId, tagId),
     suggest: (entryId: number, content: string) => ipcRenderer.invoke('tags:suggest', entryId, content),
+    getSuggestions: (entryId: number) => ipcRenderer.invoke('tags:get-suggestions', entryId),
   },
 })

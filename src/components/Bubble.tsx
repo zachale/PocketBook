@@ -188,18 +188,23 @@ export function Bubble({
   const [liveText, setLiveText] = useState(entry.content)
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
   const [isFocused, setIsFocused] = useState(false)
-  // Generation counter: bumped on every fire and on blur. Used to drop stale
-  // in-flight tags.suggest results so they don't overwrite suggestions cleared
-  // at blur time, or clobber a newer request from the same bubble.
+  // Generation counter: bumped on every fire so stale in-flight responses from
+  // earlier requests can't overwrite a newer result.
   const suggestGenRef = useRef(0)
 
   const handleFocusChange = useCallback((focused: boolean) => {
     setIsFocused(focused)
-    if (!focused) {
-      suggestGenRef.current += 1
-      setSuggestions([])
-    }
   }, [])
+
+  // Hydrate persisted suggestions on mount so they survive blur and reload
+  // without redoing the LLM work.
+  useEffect(() => {
+    let cancelled = false
+    window.api.tags.getSuggestions(entry.id)
+      .then(saved => { if (!cancelled && saved.length > 0) setSuggestions(saved) })
+      .catch(err => console.warn('[Bubble] getSuggestions failed', err))
+    return () => { cancelled = true }
+  }, [entry.id])
 
   useSuggestionTrigger({
     content: liveText,

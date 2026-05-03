@@ -36,6 +36,7 @@ beforeEach(() => {
       add: vi.fn(),
       remove: vi.fn(),
       suggest: vi.fn().mockResolvedValue([]),
+      getSuggestions: vi.fn().mockResolvedValue([]),
     },
   }
 })
