@@ -4,6 +4,7 @@ import { Scrubber } from './Scrubber'
 import { Search } from './Search'
 import { Titlebar } from './Titlebar'
 import { Onboarding } from './Onboarding'
+import { Galaxy } from './Galaxy'
 import type { Entry, TimelineEntry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
@@ -132,6 +133,7 @@ export function App() {
       <Titlebar onSearch={() => setSearchOpen(true)} />
 
       <div className="scroll-root" ref={scrollRef}>
+        <Galaxy entries={loadedDates.flatMap(d => dayMap[d] ?? [])} />
         {loadedDates.map(date => (
           <DaySection
             key={date}
