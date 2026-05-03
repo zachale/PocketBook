@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { DaySection } from './DaySection'
 import { Scrubber } from './Scrubber'
 import { Search } from './Search'
@@ -7,20 +9,32 @@ import { Onboarding } from './Onboarding'
 import type { Entry, TimelineEntry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
+type LoadStatus = 'idle' | 'loading' | 'loaded'
 
 function todayStr(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+function renderMarkdown(content: string): string {
+  if (!content) return ''
+  const raw = marked.parse(content) as string
+  return DOMPurify.sanitize(raw)
+}
+
 export function App() {
   const [dayMap, setDayMap] = useState<DayMap>({})
+  const [htmlMap, setHtmlMap] = useState<Record<number, string>>({})
   const [loadedDates, setLoadedDates] = useState<string[]>([])
+  const [dayCounts, setDayCounts] = useState<Record<string, number>>({})
+  const [loadStatus, setLoadStatus] = useState<Record<string, LoadStatus>>({})
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [freshIds, setFreshIds] = useState<Set<number>>(() => new Set())
   const [aiConfigStatus, setAiConfigStatus] = useState<'loading' | 'needed' | 'ready'>('loading')
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const loadStatusRef = useRef<Record<string, LoadStatus>>({})
+  loadStatusRef.current = loadStatus
 
   const today = React.useMemo(() => todayStr(), [])
 
@@ -40,46 +54,87 @@ export function App() {
     }, 500)
   }, [])
 
-  // Initial load — day list = today + dates with entries (descending)
+  // Load a single day's entries: prerender markdown, clean up empties on past
+  // days, and commit results into dayMap/htmlMap.
+  const loadDay = useCallback(async (date: string) => {
+    if (loadStatusRef.current[date] && loadStatusRef.current[date] !== 'idle') return
+    setLoadStatus(prev => ({ ...prev, [date]: 'loading' }))
+    try {
+      const entries = await window.api.getEntriesForDates([date])
+      entries.sort((a, b) => a.created_at - b.created_at)
+
+      let kept = entries
+      let timelineDirty = false
+
+      // Cleanup empty entries on past days only
+      if (date !== today) {
+        const empties = entries.filter(e => !e.content || e.content.trim() === '')
+        if (empties.length > 0) {
+          for (const e of empties) await window.api.deleteEntry(e.id)
+          kept = entries.filter(e => e.content && e.content.trim() !== '')
+          timelineDirty = true
+        }
+      }
+
+      // Pre-render markdown to sanitized HTML before swapping
+      const newHtml: Record<number, string> = {}
+      for (const e of kept) newHtml[e.id] = renderMarkdown(e.content)
+
+      setDayMap(prev => ({ ...prev, [date]: kept }))
+      setHtmlMap(prev => ({ ...prev, ...newHtml }))
+      setLoadStatus(prev => ({ ...prev, [date]: 'loaded' }))
+
+      // Drop the section if a past day became empty after cleanup
+      if (date !== today && kept.length === 0) {
+        setLoadedDates(prev => prev.filter(d => d !== date))
+      }
+
+      if (timelineDirty) {
+        const tl = await window.api.getTimelineIndex()
+        setTimeline(tl)
+      }
+    } catch (err) {
+      console.error('[App] loadDay failed', date, err)
+      setLoadStatus(prev => ({ ...prev, [date]: 'idle' }))
+    }
+  }, [today])
+
+  // Initial load — timeline only, plus eager-load today
   useEffect(() => {
     const init = async () => {
       const tl = await window.api.getTimelineIndex()
       const dates = [today, ...tl.map(t => t.date).filter(d => d !== today)]
+      const counts: Record<string, number> = {}
+      for (const t of tl) counts[t.date] = t.count
+      if (!(today in counts)) counts[today] = 0
 
-      const entries = await window.api.getEntriesForDates(dates)
+      setTimeline(tl)
+      setDayCounts(counts)
+      setLoadedDates(dates)
 
-      const map: DayMap = {}
-      for (const d of dates) map[d] = []
-      for (const e of entries) {
-        if (!map[e.date]) map[e.date] = []
-        map[e.date].push(e)
-      }
-      for (const d of dates) map[d].sort((a, b) => a.created_at - b.created_at)
+      // Eagerly load today's entries
+      const todayEntries = await window.api.getEntriesForDates([today])
+      todayEntries.sort((a, b) => a.created_at - b.created_at)
 
-      // Cleanup empty entries from past days
-      let timelineDirty = false
-      for (const [date, dayEntries] of Object.entries(map)) {
-        if (date === today) continue
-        const empties = dayEntries.filter(e => !e.content || e.content.trim() === '')
-        if (empties.length === 0) continue
-        for (const e of empties) await window.api.deleteEntry(e.id)
-        map[date] = dayEntries.filter(e => e.content && e.content.trim() !== '')
-        timelineDirty = true
-      }
-
-      // Drop dates that ended up empty after cleanup (always keep today)
-      const kept = dates.filter(d => d === today || map[d].length > 0)
-
-      // Seed today's empty bubble if none
-      if (map[today].length === 0) {
+      let seedTimelineRefresh = false
+      let finalToday = todayEntries
+      if (todayEntries.length === 0) {
         const empty = await window.api.upsertEntry({ date: today, position: 0, content: '' })
-        map[today] = [empty]
-        timelineDirty = true
+        finalToday = [empty]
+        seedTimelineRefresh = true
       }
 
-      setDayMap(map)
-      setLoadedDates(kept)
-      setTimeline(timelineDirty ? await window.api.getTimelineIndex() : tl)
+      const todayHtml: Record<number, string> = {}
+      for (const e of finalToday) todayHtml[e.id] = renderMarkdown(e.content)
+
+      setDayMap(prev => ({ ...prev, [today]: finalToday }))
+      setHtmlMap(prev => ({ ...prev, ...todayHtml }))
+      setLoadStatus(prev => ({ ...prev, [today]: 'loaded' }))
+
+      if (seedTimelineRefresh) {
+        const tl2 = await window.api.getTimelineIndex()
+        setTimeline(tl2)
+      }
     }
     init()
   }, [today])
@@ -127,6 +182,10 @@ export function App() {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
+  const handleNeedsLoad = useCallback((date: string) => {
+    void loadDay(date)
+  }, [loadDay])
+
   return (
     <div style={{ height: '100%', position: 'relative' }}>
       <Titlebar onSearch={() => setSearchOpen(true)} />
@@ -139,11 +198,15 @@ export function App() {
             today={today}
             entries={dayMap[date] ?? []}
             isToday={date === today}
+            loaded={loadStatus[date] === 'loaded'}
+            placeholderCount={dayCounts[date] ?? 0}
+            htmlMap={htmlMap}
             freshIds={freshIds}
             aiReady={aiConfigStatus === 'ready'}
             onEntriesChange={handleEntriesChange}
             onAddEntry={handleAddEntry}
             onMarkFresh={markFresh}
+            onNeedsLoad={handleNeedsLoad}
           />
         ))}
       </div>

@@ -19,6 +19,12 @@ interface Props {
   autoFocus?: boolean
   fresh?: boolean
   aiReady?: boolean
+  /**
+   * Pre-rendered, already-sanitized HTML. When supplied, the bubble uses this
+   * for its inactive (non-editor) view and skips marked.parse + sanitize on
+   * mount — eliminating the flash of raw markdown during initial paint.
+   */
+  prerenderedHTML?: string
 }
 
 interface Handlers {
@@ -158,12 +164,27 @@ export function Bubble({
   autoFocus = false,
   fresh = false,
   aiReady = false,
+  prerenderedHTML,
 }: Props) {
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(autoFocus)
-  const [cachedHTML, setCachedHTML] = useState(() =>
-    entry.content ? (marked.parse(entry.content) as string) : ''
-  )
+  // Prefer pre-rendered HTML (already sanitized upstream). Fall back to
+  // parsing on mount only when the parent didn't pre-render.
+  const prerenderedRef = useRef(prerenderedHTML)
+  const [cachedHTML, setCachedHTML] = useState(() => {
+    if (prerenderedHTML !== undefined) return prerenderedHTML
+    return entry.content ? (marked.parse(entry.content) as string) : ''
+  })
+
+  // If the parent supplies pre-rendered HTML after mount (e.g. lazy load
+  // resolved), adopt it.
+  useEffect(() => {
+    if (prerenderedHTML !== undefined && prerenderedHTML !== prerenderedRef.current) {
+      prerenderedRef.current = prerenderedHTML
+      setCachedHTML(prerenderedHTML)
+    }
+  }, [prerenderedHTML])
+
   const [liveText, setLiveText] = useState(entry.content)
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
   const [isFocused, setIsFocused] = useState(false)
@@ -175,8 +196,6 @@ export function Bubble({
   const handleFocusChange = useCallback((focused: boolean) => {
     setIsFocused(focused)
     if (!focused) {
-      // Bump generation so any inflight request resolves into a no-op,
-      // and clear stale suggestions from the bar.
       suggestGenRef.current += 1
       setSuggestions([])
     }
@@ -189,7 +208,7 @@ export function Bubble({
       const myGen = ++suggestGenRef.current
       try {
         const r = await window.api.tags.suggest(entry.id, text)
-        if (suggestGenRef.current !== myGen) return // stale; drop
+        if (suggestGenRef.current !== myGen) return
         setSuggestions(r)
       } catch (err) {
         if (suggestGenRef.current !== myGen) return
