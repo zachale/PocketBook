@@ -138,32 +138,6 @@ body {
   user-select: none;
   pointer-events: none;
 }
-.galaxy-controls {
-  position: absolute;
-  right: 14px;
-  top: 12px;
-  display: flex;
-  gap: 8px;
-}
-.galaxy-btn {
-  appearance: none;
-  border: 0;
-  background: rgba(255, 255, 255, 0.55);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pb-text-muted);
-  box-shadow: inset 0 0 0 0.5px rgba(120, 160, 200, 0.25);
-  cursor: pointer;
-}
-.galaxy-btn:hover {
-  background: rgba(255, 255, 255, 0.8);
-  color: var(--pb-text);
-}
-
 /* ── Bubble ─────────────────────────────────────────────────── */
 .bubble {
   position: relative;

@@ -120,13 +120,28 @@ function hashStr(s: string): number {
   return h >>> 0
 }
 
+// Per-entry stable seed. Same content + id → same seed forever.
+function entrySeed(e: Entry): number {
+  return hashStr(e.content || `entry-${e.id}`) ^ (e.id | 0)
+}
+
+// Salts isolate per-entry feature RNGs so adding a new feature (e.g. color)
+// can't shift the rolls of existing features (moons, rings, …). To add a
+// feature: pick a fresh 32-bit constant here and derive its rng via
+// `subRng(entrySeed, NEW_SALT)`. Never reuse or reorder these.
+const SALT = {
+  moons:   0x9e3779b1,
+  rings:   0x7f4a7c15,
+  // future: color, halo tint, accretion variant, ...
+}
+
+const subRng = (seed: number, salt: number): Rng => mulberry32((seed ^ salt) >>> 0)
+
 // Synthetic embedding from entry content. Stable per-content-string; replaced
 // by real model embeddings once the AI pipeline lands.
-function syntheticEmbedding(content: string, id: number): number[] {
-  const seed = hashStr(content || `entry-${id}`) ^ id
+function syntheticEmbedding(content: string, seed: number): number[] {
   const rng = mulberry32(seed)
   const v = new Array(EMBED_DIM).fill(0).map(() => rng() - 0.5)
-  // Bias a couple of dims by content length / first-word so similar texts cluster
   const firstWord = (content.trim().split(/\s+/)[0] || '').toLowerCase()
   v[0] += firstWord.length * 0.1
   v[1] += Math.min(20, content.length) * 0.05
@@ -508,23 +523,34 @@ export interface GalaxyProps {
 }
 
 export function Galaxy({ entries, width = 880, height = 380 }: GalaxyProps) {
-  // Reroll seed lets the user shake up the layout; not tied to entry data.
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
-
   const data = useMemo(() => {
-    const planetEntries: PEntry[] = entries.map(e => ({
+    // Per-entry seed: same content + id → same seed across reloads.
+    const seeds = entries.map(entrySeed)
+
+    const planetEntries: PEntry[] = entries.map((e, i) => ({
       id: e.id,
-      embedding: syntheticEmbedding(e.content, e.id),
+      embedding: syntheticEmbedding(e.content, seeds[i]),
     }))
     const graph   = buildGraph(planetEntries)
-    const layout  = buildLayout(planetEntries.length, width, height, seed + 1)
     const metrics = nodeMetrics(graph.degree)
-    const decoRng = mulberry32(seed + 3)
-    const moons   = planetEntries.map((_, i) => buildMoons(metrics.sizes[i], metrics.percentiles[i], decoRng))
-    const rings   = planetEntries.map(() => buildRing(decoRng))
-    const stars   = buildStars(width, height, seed + 99)
+
+    // Galaxy-wide layout/star seed: stable across reloads for the same set of
+    // entries. Position itself isn't entry-stable (rejection sampling iterates
+    // over the set), but the same set produces the same layout.
+    let galaxySeed = 0x9e3779b9
+    for (const s of seeds) galaxySeed = (galaxySeed ^ s) >>> 0
+    const layout = buildLayout(planetEntries.length, width, height, galaxySeed)
+    const stars  = buildStars(width, height, (galaxySeed ^ 0x5bd1e995) >>> 0)
+
+    // Per-entry feature rolls. Each feature gets its own salted sub-rng so
+    // adding a new feature doesn't shift existing rolls.
+    const moons = planetEntries.map((_, i) =>
+      buildMoons(metrics.sizes[i], metrics.percentiles[i], subRng(seeds[i], SALT.moons))
+    )
+    const rings = planetEntries.map((_, i) => buildRing(subRng(seeds[i], SALT.rings)))
+
     return { entries: planetEntries, graph, layout, metrics, moons, rings, stars }
-  }, [entries, seed, width, height])
+  }, [entries, width, height])
 
   const nodeRefs = useRef<Record<number, SVGGElement | null>>({})
   const edgeRefs = useRef<Record<string, SVGLineElement | null>>({})
@@ -628,12 +654,6 @@ export function Galaxy({ entries, width = 880, height = 380 }: GalaxyProps) {
           </g>
         ))}
       </svg>
-      <div className="galaxy-controls">
-        <button
-          className="galaxy-btn"
-          onClick={() => setSeed(Math.floor(Math.random() * 1e9))}
-        >↻ reroll</button>
-      </div>
       <div className="galaxy-label">your galaxy</div>
     </div>
   )
