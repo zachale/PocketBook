@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Bubble } from './Bubble'
 import type { Entry } from '../shared/types'
 
@@ -7,15 +7,12 @@ interface Props {
   today: string
   entries: Entry[]
   isToday: boolean
-  loaded: boolean
-  placeholderCount?: number
   htmlMap: Record<number, string>
   freshIds: Set<number>
   aiReady: boolean
   onEntriesChange: (date: string, entries: Entry[]) => void
   onAddEntry: (date: string) => void
   onMarkFresh: (id: number) => void
-  onNeedsLoad: (date: string) => void
 }
 
 const WEEKDAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
@@ -32,55 +29,18 @@ function formatDate(dateStr: string, today: string): string {
   return `${WEEKDAYS[d.getDay()]} · ${m} ${day}`
 }
 
-// Stable hash → skeleton bubble height. Keeps the placeholder shape consistent
-// across re-renders without storing per-section state.
-function skeletonHeight(date: string, idx: number): number {
-  let h = 5381
-  const s = `${date}:${idx}`
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  const min = 64
-  const span = 96 // 64 → 160
-  return min + (Math.abs(h) % span)
-}
-
 export function DaySection({
   date,
   today,
   entries,
   isToday,
-  loaded,
-  placeholderCount = 0,
   htmlMap,
   freshIds,
   aiReady,
   onEntriesChange,
   onAddEntry,
   onMarkFresh,
-  onNeedsLoad,
 }: Props) {
-  const sectionRef = useRef<HTMLDivElement>(null)
-  const requestedRef = useRef(false)
-
-  // Trigger a load request when the section nears the viewport
-  useEffect(() => {
-    if (loaded || isToday) return
-    if (requestedRef.current) return
-    const el = sectionRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([obs]) => {
-        if (obs.isIntersecting && !requestedRef.current) {
-          requestedRef.current = true
-          onNeedsLoad(date)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: '600px' }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [date, isToday, loaded, onNeedsLoad])
-
   const handleNewBubble = useCallback(
     async (afterPosition: number) => {
       const newEntry = await window.api.upsertEntry({
@@ -98,7 +58,6 @@ export function DaySection({
 
   const handleDeleteBubble = useCallback(
     async (idx: number) => {
-      // Refuse to delete the only writable bubble on today
       if (isToday && entries.length <= 1) return
       const entry = entries[idx]
       if (!entry) return
@@ -127,29 +86,7 @@ export function DaySection({
     setEmptyMap(prev => (prev[id] === empty ? prev : { ...prev, [id]: empty }))
   }, [])
 
-  // Crossfade: keep skeletons mounted briefly so the swap is a transition,
-  // not a pop. They fade out via .skeleton-layer.fading.
-  const [skeletonsVisible, setSkeletonsVisible] = useState(!loaded && !isToday)
-  const [skeletonsMounted, setSkeletonsMounted] = useState(!loaded && !isToday)
-
-  useEffect(() => {
-    if (loaded && skeletonsMounted) {
-      // Begin fade-out, then unmount after the transition.
-      setSkeletonsVisible(false)
-      const t = setTimeout(() => setSkeletonsMounted(false), 280)
-      return () => clearTimeout(t)
-    }
-    if (!loaded && !isToday && !skeletonsMounted) {
-      setSkeletonsMounted(true)
-      setSkeletonsVisible(true)
-    }
-  }, [loaded, isToday, skeletonsMounted])
-
-  // Hide entirely if a non-today day is loaded with no content. Before load
-  // we still render the section (with skeletons) so the timeline shape is
-  // visible — but if there's no count either, drop it.
-  if (!isToday && loaded && entries.length === 0) return null
-  if (!isToday && !loaded && placeholderCount === 0) return null
+  if (!isToday && entries.length === 0) return null
 
   const last = entries[entries.length - 1]
   const lastEmpty = last
@@ -157,51 +94,27 @@ export function DaySection({
         ? emptyMap[last.id]
         : !last.content || last.content.trim() === '')
     : true
-  const showPill = loaded && entries.length > 0 && !lastEmpty
-
-  const showRealBubbles = loaded || (isToday && entries.length > 0)
+  const showPill = entries.length > 0 && !lastEmpty
 
   return (
-    <div className="day-section" data-date={date} ref={sectionRef}>
+    <div className="day-section" data-date={date}>
       <div className="date-header">{formatDate(date, today)}</div>
-
-      {skeletonsMounted && (
-        <div
-          className={`skeleton-layer${skeletonsVisible ? '' : ' fading'}`}
-          aria-hidden="true"
-        >
-          {Array.from({ length: Math.max(1, placeholderCount) }).map((_, i) => (
-            <div
-              key={i}
-              className="bubble skeleton"
-              style={{ height: skeletonHeight(date, i) }}
-            />
-          ))}
-        </div>
-      )}
-
-      {showRealBubbles && (
-        <div className={`entries-layer${loaded ? ' visible' : ''}`}>
-          {entries.map((entry, idx) => {
-            const isLast = idx === entries.length - 1
-            return (
-              <Bubble
-                key={entry.id}
-                entry={entry}
-                prerenderedHTML={htmlMap[entry.id]}
-                fresh={freshIds.has(entry.id)}
-                aiReady={aiReady}
-                onNewBubble={() => handleNewBubble(idx)}
-                onDeleteBubble={() => handleDeleteBubble(idx)}
-                onEmptyChange={(empty) => handleEmptyChange(entry.id, empty)}
-                autoFocus={freshIds.has(entry.id) || (isToday && isLast)}
-              />
-            )
-          })}
-        </div>
-      )}
-
-
+      {entries.map((entry, idx) => {
+        const isLast = idx === entries.length - 1
+        return (
+          <Bubble
+            key={entry.id}
+            entry={entry}
+            prerenderedHTML={htmlMap[entry.id]}
+            fresh={freshIds.has(entry.id)}
+            aiReady={aiReady}
+            onNewBubble={() => handleNewBubble(idx)}
+            onDeleteBubble={() => handleDeleteBubble(idx)}
+            onEmptyChange={(empty) => handleEmptyChange(entry.id, empty)}
+            autoFocus={freshIds.has(entry.id) || (isToday && isLast)}
+          />
+        )
+      })}
       {showPill && (
         <div className="add-pill-row">
           <button

@@ -13,8 +13,6 @@
   --pb-text: #1a2a3a;
   --pb-text-muted: rgba(26, 42, 58, 0.55);
   --pb-titlebar-bg: rgba(220, 235, 250, 0.45);
-  --pb-scrub-track: rgba(85, 153, 204, 0.22);
-  --pb-scrub-handle: #5599cc;
   --pb-overlay: rgba(255, 255, 255, 0.72);
   --pb-overlay-blur: blur(28px) saturate(170%);
   --pb-radius-bubble: 18px;
@@ -131,62 +129,6 @@ body {
   animation: pb-bubble-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* ── Skeleton bubble (lazy-load placeholder) ────────────────── */
-.bubble.skeleton {
-  cursor: default;
-  background: rgba(255, 255, 255, 0.42);
-  position: relative;
-  overflow: hidden;
-}
-
-.bubble.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0) 30%,
-    rgba(255, 255, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0) 70%
-  );
-  transform: translateX(-100%);
-  animation: pb-skeleton-shimmer 1.4s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.skeleton-layer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  opacity: 1;
-  max-height: 4000px;
-  overflow: hidden;
-  transition: opacity 240ms ease, max-height 280ms ease;
-}
-
-.skeleton-layer.fading {
-  opacity: 0;
-  max-height: 0;
-  pointer-events: none;
-}
-
-.entries-layer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  opacity: 0;
-  transition: opacity 260ms ease;
-}
-
-.entries-layer.visible {
-  opacity: 1;
-}
-
-@keyframes pb-skeleton-shimmer {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
 /* ── ProseMirror (Tiptap editor) ────────────────────────────── */
 .ProseMirror {
   outline: none;
@@ -279,57 +221,6 @@ body {
 
 .add-pill svg { flex-shrink: 0; }
 .add-pill span { opacity: 0.85; }
-
-/* ── Scrubber ───────────────────────────────────────────────── */
-.scrubber {
-  position: fixed;
-  top: 60px;
-  bottom: 24px;
-  right: 14px;
-  width: 60px;
-  pointer-events: none;
-  z-index: 10;
-}
-
-.scrubber-track {
-  position: absolute;
-  top: 0; bottom: 0;
-  right: 14px;
-  width: 3px;
-  background: var(--pb-scrub-track);
-  border-radius: 2px;
-  pointer-events: auto;
-  cursor: ns-resize;
-}
-
-.scrubber-handle {
-  position: absolute;
-  right: 9px;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--pb-scrub-handle);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 3px var(--pb-bubble-bg);
-  pointer-events: auto;
-  cursor: grab;
-  transition: top 120ms ease;
-}
-
-.scrubber-handle:active { cursor: grabbing; }
-
-.scrubber-label {
-  position: absolute;
-  right: 22px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pb-text-muted);
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-  text-align: right;
-}
 
 /* ── Search overlay ─────────────────────────────────────────── */
 .search-overlay {
