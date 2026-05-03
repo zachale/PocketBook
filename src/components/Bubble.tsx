@@ -56,6 +56,7 @@ function ActiveEditor({
   onDeleteBubble,
   onEmptyChange,
   onTextChange,
+  onFocusChange,
   autoFocus,
   onHTMLChange,
 }: {
@@ -64,6 +65,7 @@ function ActiveEditor({
   onDeleteBubble?: () => void
   onEmptyChange?: (empty: boolean) => void
   onTextChange?: (text: string) => void
+  onFocusChange?: (focused: boolean) => void
   autoFocus: boolean
   onHTMLChange: (html: string) => void
 }) {
@@ -131,6 +133,20 @@ function ActiveEditor({
 
   useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }, [])
 
+  useEffect(() => {
+    if (!editor) return
+    const handleFocus = () => onFocusChange?.(true)
+    const handleBlur = () => onFocusChange?.(false)
+    editor.on('focus', handleFocus)
+    editor.on('blur', handleBlur)
+    // Seed initial focus state (Tiptap autofocus mounts with isFocused=true)
+    if (editor.isFocused) onFocusChange?.(true)
+    return () => {
+      editor.off('focus', handleFocus)
+      editor.off('blur', handleBlur)
+    }
+  }, [editor, onFocusChange])
+
   return <EditorContent editor={editor} />
 }
 
@@ -150,15 +166,33 @@ export function Bubble({
   )
   const [liveText, setLiveText] = useState(entry.content)
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
+  const [isFocused, setIsFocused] = useState(false)
+  // Generation counter: bumped on every fire and on blur. Used to drop stale
+  // in-flight tags.suggest results so they don't overwrite suggestions cleared
+  // at blur time, or clobber a newer request from the same bubble.
+  const suggestGenRef = useRef(0)
+
+  const handleFocusChange = useCallback((focused: boolean) => {
+    setIsFocused(focused)
+    if (!focused) {
+      // Bump generation so any inflight request resolves into a no-op,
+      // and clear stale suggestions from the bar.
+      suggestGenRef.current += 1
+      setSuggestions([])
+    }
+  }, [])
 
   useSuggestionTrigger({
     content: liveText,
-    enabled: aiReady && isVisible,
+    enabled: aiReady && isFocused,
     onTrigger: async (text) => {
+      const myGen = ++suggestGenRef.current
       try {
         const r = await window.api.tags.suggest(entry.id, text)
+        if (suggestGenRef.current !== myGen) return // stale; drop
         setSuggestions(r)
       } catch (err) {
+        if (suggestGenRef.current !== myGen) return
         console.warn('[Bubble] suggest failed', err)
       }
     },
@@ -189,6 +223,7 @@ export function Bubble({
           onDeleteBubble={onDeleteBubble}
           onEmptyChange={onEmptyChange}
           onTextChange={setLiveText}
+          onFocusChange={handleFocusChange}
           autoFocus={autoFocus}
           onHTMLChange={setCachedHTML}
         />

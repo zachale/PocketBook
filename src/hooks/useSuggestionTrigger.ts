@@ -28,7 +28,9 @@ export function useSuggestionTrigger({ content, enabled, onTrigger }: Args) {
 
   useEffect(() => {
     if (!enabled) {
-      lastFiredWordsRef.current = null
+      // Note: intentionally do NOT reset lastFiredWordsRef here. If the user
+      // re-enables this hook (e.g. re-focuses the bubble) without meaningfully
+      // changing content, we don't want to re-fire the LLM. Only timers clear.
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       if (mountTimerRef.current) clearTimeout(mountTimerRef.current)
       return
