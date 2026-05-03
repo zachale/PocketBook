@@ -3,6 +3,7 @@ import { DaySection } from './DaySection'
 import { Search } from './Search'
 import { Titlebar } from './Titlebar'
 import { Onboarding } from './Onboarding'
+import { Galaxy } from './Galaxy'
 import type { Entry } from '../shared/types'
 
 type DayMap = Record<string, Entry[]>
@@ -171,6 +172,7 @@ export function App() {
       <Titlebar onSearch={() => setSearchOpen(true)} />
 
       <div className="scroll-root" ref={scrollRef}>
+        <Galaxy entries={visibleDates.flatMap(d => dayMap[d] ?? [])} />
         {visibleDates.map(date => (
           <DaySection
             key={date}
