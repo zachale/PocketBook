@@ -22,10 +22,13 @@ export function TagBar({ entryId, suggestions }: Props) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Filter out suggestions that already became tags on this entry.
-  const attachedIds = new Set(tags.map(t => t.id))
+  // Filter out suggestions already attached to this entry. Match by name
+  // (case-insensitive) so AI-generated suggestions — which carry tagId:null
+  // until first acceptance — are also dropped once their newly-created tag
+  // shows up in `tags`.
+  const attachedNames = new Set(tags.map(t => t.name.toLowerCase()))
   const visibleSuggestions = suggestions.filter(
-    s => s.tagId == null || !attachedIds.has(s.tagId),
+    s => !attachedNames.has(s.name.toLowerCase()),
   )
 
   const handleRemove = useCallback(
